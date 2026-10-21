@@ -1,0 +1,30 @@
+# Test całego łańcucha na danych syntetycznych (format kontraktu danych).
+# Dane: python -m ravaflow_tools.synthetic data/synthetic
+# Walidacja: python -m ravaflow_tools.check_inputs data/synthetic --volume 2e6 --cellsize 30 --epsg 32645
+# Uwaga: parametry modelu to wartości startowe z przykładu Cascadia (exp2), NIE kalibrowane.
+workdir: data/synthetic
+grass_mapset: ~/grassdata/xy_loc/PERMANENT
+region_from: syn_elev
+
+inputs:
+  syn_elev: elevation.tif
+  syn_release: release_height.tif
+  syn_ref: reference_extent.tif
+
+flags: ""
+
+params:
+  prefix: syn_base
+  cellsize: 30
+  phases: 3
+  elevation: syn_elev
+  hrelease: syn_release
+  rhrelease1: 0.5
+  friction: [35, 0, 0, 35, 0, 0, 0, 0, 0.05]
+  time: [10, 400]
+  impactarea: syn_ref
+  # visualization: kontury terenu zcontmin,zcontmax,zcontint dopasowane do 3200-6300 m n.p.m.
+  visualization: [1, 1.0, 5.0, 5.0, 1, 200, 5, 3000, 6400, 100, 0.30, 0.30, 0.60, 0.2, 1.0, None, None, None]
+
+reference_mask: reference_extent.tif
+threshold: 0.1

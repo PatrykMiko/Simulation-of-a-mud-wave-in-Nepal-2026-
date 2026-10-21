@@ -1,0 +1,29 @@
+# Eksperyment 2 z paczki Cascadia (spływ gruzowy, 3 fazy) - test całego łańcucha.
+# Uruchamiać z katalogu głównego projektu.
+workdir: data/cascadia                      # tu leżą DATA/ i tu powstaną wyniki
+grass_mapset: ~/grassdata/xy_loc/PERMANENT  # lokalizacja Generic XY
+region_from: ca_elev                        # raster, z którego ustawiamy region
+
+inputs:                                     # nazwa rastra w GRASS: plik
+  ca_elev: DATA/ca_elev.tif
+  ca_debrisflow: DATA/ca_debrisflow.tif
+  ca_impactarea: DATA/ca_impactarea.tif
+
+flags: ""                                   # np. "-a" (rastry prędkości/ciśnienia)
+
+params:                                     # dokładnie jak w skrypcie ca.avaflow.start.sh
+  prefix: ca_exp2
+  cellsize: 20
+  phases: 3
+  elevation: ca_elev
+  hrelease: ca_debrisflow
+  rhrelease1: 0.5
+  friction: [35, 0, 0, 35, 0, 0, 0, 0, 0.05]
+  time: [5, 200]
+  impactarea: ca_impactarea
+  profile: [4470, 4095, 4415, 3350, 4200, 2355, 4700, 2240, 5075, 1870]
+  visualization: [1, 1.0, 5.0, 5.0, 1, 200, 5, 0, 3000, 50, 0.30, 0.30, 0.60, 0.2, 1.0, None, None, None]
+
+# do oceny własnymi metrykami (ravaflow_tools.score)
+reference_mask: DATA/ca_impactarea.tif
+threshold: 0.1                              # próg grubości [m] dla zasięgu modelu

@@ -1,0 +1,7 @@
+numpy
+scipy
+matplotlib
+pyyaml
+rasterio
+imageio
+pytest

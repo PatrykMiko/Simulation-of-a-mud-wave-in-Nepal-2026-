@@ -1,0 +1,15 @@
+# Przykładowa seria scenariuszy na danych syntetycznych (S1-S3 z planu).
+# Współrzędne bariery w układzie mapy (tu: okolice UTM 45N z generatora syntetycznego).
+# Dolina na ok. 3 km od góry leży przy x = 343165..343555, y = 3115985.
+base: configs/synthetic_test.yaml
+variants:
+  - name: mass_x0.5
+    scale_release: 0.5
+  - name: mass_x2
+    scale_release: 2.0
+  - name: dam_40m
+    # przeszkoda w poprzek doliny na ok. 3 km od góry (S1: tama)
+    barrier: {x1: 342700, y1: 3115985, x2: 344000, y2: 3115985, height: 40, width: 60}
+  - name: phase_mix_alt
+    # S3: inny udział frakcji w masie (parametr rhrelease1 - sprawdź znaczenie w manualu r.avaflow)
+    params: {rhrelease1: 0.8}

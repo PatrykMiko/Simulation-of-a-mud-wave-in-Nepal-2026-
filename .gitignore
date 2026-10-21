@@ -1,0 +1,25 @@
+# --- środowiska wirtualne i cache ---
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# --- ustawienia edytorów ---
+.idea/
+.vscode/
+.DS_Store
+
+# --- zewnętrzne oprogramowanie: pobierane osobno (docs/uruchamianie.md) ---
+r.avaflow.40G/
+
+# --- dane: poza Gitem (patrz data/README.md) ---
+data/*
+!data/README.md
+
+# --- wyniki i pliki generowane przy przebiegach ---
+*_results/
+*_score/
+*.run.log
+*.run.sh
+scenarios_summary.csv
