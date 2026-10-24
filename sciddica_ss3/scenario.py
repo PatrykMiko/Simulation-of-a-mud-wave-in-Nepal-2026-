@@ -27,7 +27,7 @@ def make_albano_like(
     if max_y <= 0:
         raise ValueError("Scenario requires at least two rows")
 
-    base = 300.0 - 250.0 * (y / max_y)
+    base = 300.0 - 250.0 * np.divide(y, max_y)
 
     row_mid = p.pc * SQRT3 * (n / 2.0 + np.arange(n)[:, None] / 2.0)
 
@@ -81,10 +81,3 @@ def jaccard_fitness(
 
     return float(np.logical_and(real, simulated).sum() / union)
 
-
-def ss2_overlap_fitness(
-    real_mask: np.ndarray,
-    simulated_mask: np.ndarray,
-) -> float:
-    """SS2 paper's overlap fitness: sqrt(|R ∩ S| / |R ∪ S|)."""
-    return float(np.sqrt(jaccard_fitness(real_mask, simulated_mask)))

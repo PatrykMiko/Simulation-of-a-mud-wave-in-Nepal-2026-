@@ -85,24 +85,25 @@ def animate(
 
     p = model.params
     vertices = hex_vertices(x, y, p.pc)
+    polygons = list(vertices)
 
     fig, ax = plt.subplots(figsize=(8, 8))
 
     land = PolyCollection(
-        vertices,
+        polygons,
         array=model.altitude.ravel(),
-        cmap="Greys",
+        cmap="terrain",
         edgecolors="none",
     )
     ax.add_collection(land)
 
-    lake = PolyCollection(vertices, edgecolors="none")
+    lake = PolyCollection(polygons, edgecolors="none")
     ax.add_collection(lake)
 
     cmap = plt.get_cmap("inferno").copy()
     cmap.set_bad((0, 0, 0, 0))
 
-    debris = PolyCollection(vertices, cmap=cmap, edgecolors="none")
+    debris = PolyCollection(polygons, cmap=cmap, edgecolors="none")
 
     debris.set_clim(0.0, max(4.0, float(model.thickness.max())))
     debris.set_array(np.ma.masked_less(model.thickness.ravel(), 0.02))
@@ -132,7 +133,7 @@ def animate(
         water_colours[:, 2] = 0.95
         water_colours[:, 3] = water_alpha
 
-        lake.set_facecolors(water_colours)
+        lake.set_facecolor([tuple(color) for color in water_colours])
 
         debris.set_array(np.ma.masked_less(model.thickness.ravel(), 0.02))
 

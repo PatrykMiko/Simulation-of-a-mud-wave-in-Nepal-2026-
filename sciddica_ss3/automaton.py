@@ -458,6 +458,7 @@ class SciddicaSS3:
             momentum_x=px1,
             momentum_y=py1,
             phase=phase2,
+            keep_stationary=False,
         )
 
         turbulence_momentum_scale = np.sqrt(np.maximum(1.0 - ptd, 0.0))
@@ -564,8 +565,13 @@ class SciddicaSS3:
         momentum_x: np.ndarray,
         momentum_y: np.ndarray,
         phase: OutflowPhase,
+        keep_stationary: bool = True,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """Compose retained momentum with directional internal-flow momentum."""
+        """Compose retained momentum with directional internal-flow momentum.
+
+        keep_stationary=False models the paper's phase 2: debris that cannot
+        overcome obstacles hits and bounces, so its momentum disappears.
+        """
         stationary = np.maximum(mass_before - phase.requested.sum(axis=0), 0.0)
 
         stationary_fraction = np.divide(
@@ -575,11 +581,17 @@ class SciddicaSS3:
             where=mass_before > EPS,
         )
 
-        px = momentum_x * stationary_fraction
-        py = momentum_y * stationary_fraction
+        if keep_stationary:
+            px = momentum_x * stationary_fraction
+            py = momentum_y * stationary_fraction
+        else:
+            px = np.zeros_like(momentum_x)
+            py = np.zeros_like(momentum_y)
 
         for direction in range(6):
-            speed = np.sqrt(2.0 * GRAVITY * np.maximum(phase.shifted_kinetic_head[direction], 0.0))
+            speed = np.sqrt(
+                2.0 * GRAVITY * np.maximum(phase.shifted_kinetic_head[direction], 0.0)
+            )
             internal_momentum = (
                 self.params.rho * self.params.cell_area * phase.internal[direction] * speed
             )
@@ -587,7 +599,7 @@ class SciddicaSS3:
             py += internal_momentum * DIRECTION_Y[direction]
 
         return px, py
-
+    
     def run(self, steps: int, callback=None) -> None:
         """Run a number of transitions, optionally calling callback(model, i)."""
         if steps < 0:

@@ -134,12 +134,11 @@ def _shift_fraction(
 
         horizontal_distance = np.maximum(np.hypot(dx, dy), EPS)
 
-        height_drop = source_surface + kh - neighbour_surface[direction]
+        geometric_drop = source_surface - neighbour_surface[direction]
 
-        theta = np.arctan2(height_drop, horizontal_distance)
-        tan_theta = height_drop / horizontal_distance
+        theta = np.arctan2(geometric_drop, horizontal_distance)
 
-        can_move = tan_theta >= fc
+        can_move = (geometric_drop + kh) >= fc * horizontal_distance
 
         acceleration_gravity = np.where(sub, submerged_g, GRAVITY)
 
