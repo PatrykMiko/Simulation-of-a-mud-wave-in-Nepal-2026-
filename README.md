@@ -1,13 +1,14 @@
 # Symulacja fali błotnej w Nepalu (2026): SCIDDICA-SS3 vs r.avaflow v4
 
-Odtwarzamy numerycznie zdarzenie z 26 sierpnia 2026
+Projekt na przedmiot *Symulacja systemów dyskretnych*. Odtwarzamy numerycznie zdarzenie z 26 sierpnia 2026
 (zawalenie skał i lodowca w Parku Narodowym Langtang, spływ gruzowy i powódź wzdłuż rzek Lende Khola i
 Trishuli) dwoma modelami o skrajnie różnej złożoności: automatem komórkowym **SCIDDICA-SS3** i wielofazowym
 modelem ciągłym **r.avaflow v4**. Porównujemy je pod względem dokładności zasięgu, wrażliwości na dane i
 kosztu obliczeń, a potem sprawdzamy scenariusze „co by było, gdyby” (tama na trasie, inna masa lodowca, inny
-udział lodu i wody).
+udział lodu i wody). Pełny opis celów i pytań badawczych RQ1–RQ9 jest w planie projektu.
 
-
+To repozytorium zawiera **część r.avaflow**: uruchamianie modelu, ocenę wyników, wizualizację, kontrolę danych
+wejściowych i scenariusze. Część SS3 powstaje osobno, ale ma korzystać z tych samych danych i tych samych metryk.
 
 ## Gdzie co jest
 
@@ -66,14 +67,13 @@ from ravaflow_tools import metrics as M
 hmax, meta = M.read_raster("wynik_ss3_maks_grubosc.asc")
 ref, ref_meta = M.read_raster("data/nepal/reference_extent.tif")
 if not M.same_grid(meta, ref_meta):
-    print(M.grid_differences(meta, ref_meta))   # co dokładnie się różni
     ref = M.sample_to_grid(ref, ref_meta, meta)
 
 obs, valid = M.reference_masks(ref, {**meta, "nodata": ref_meta["nodata"]})
 model = M.model_extent(hmax, meta, threshold=0.1)
 print(M.score(model, obs, valid, meta["cellsize"]))   # jaccard, precision, recall, f1, ...
 ```
-Najprościej zapisać wynik SS3 dokładnie na siatce reference_extent.tif.
+
 ## Dla osób od danych
 
 Format, jakiego potrzebuje model: `data/README.md`. Zanim wyślesz pliki, sprawdź je walidatorem:
@@ -90,11 +90,4 @@ siatka lub rozmiar komórki w poszczególnych plikach, układ geograficzny (stop
 
 Krótko: pipeline r.avaflow jest uruchomiony i sprawdzony na przykładzie Cascadia, a walidator, dane syntetyczne
 i scenariusze są gotowe i przetestowane bez GRASS-a. Szczegóły, wyniki i co z nich wynika: `docs/stan_prac.md`.
-
-
-## Źródła i licencje
-
-- r.avaflow 4.0G (Mergili i in. 2025, GMD 18: 9879–9896) jest oprogramowaniem na licencji GPL; pobieramy je
-  osobno ze strony projektu (`https://www.landslidemodels.org/r.avaflow/`) i nie wersjonujemy w tym repozytorium.
-- Dane Cascadia pochodzą z paczki przykładowej r.avaflow; dane z Nepalu mają źródła opisane w notkach do danych.
 

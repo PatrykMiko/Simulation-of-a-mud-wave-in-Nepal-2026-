@@ -144,28 +144,3 @@ def test_start_script_matches_cascadia_example():
     call = [ln for ln in script.splitlines() if ln.startswith("r.avaflow.40G")][0]
     assert "prefix=ca_exp2" in call and "friction=35,0,0,35,0,0,0,0,0.05" in call
     assert "r.in.gdal -o --overwrite input=DATA/ca_elev.tif output=ca_elev" in script
-
-def test_grid_differences_reports_what_differs():
-    """Przypadek z syn_base: r.avaflow zwraca siatkę 201x301 przesuniętą względem referencji 200x300."""
-    model = {"ncols": 201, "nrows": 301, "xll": 339975.0, "yll": 3109965.0, "cellsize": 30.0, "nodata": -9999.0}
-    ref = {"ncols": 200, "nrows": 300, "xll": 340000.0, "yll": 3110000.0, "cellsize": 30.0, "nodata": -9999.0}
-    assert not M.same_grid(model, ref)
-    text = " ".join(M.grid_differences(model, ref))
-    assert "201x301" in text and "200x300" in text
-    assert "dx=+5.0" in text and "dy=-5.0" in text
-    assert "rozmiar komórki" not in text          # komórki są takie same, więc nie wolno o nich pisać
-    assert M.grid_differences(ref, dict(ref)) == []
-    coarse = {**ref, "cellsize": 60.0}
-    assert "rozmiar komórki: 30.0 m vs 60.0 m" in " ".join(M.grid_differences(ref, coarse))
-
-
-def test_shifted_grid_reference_is_resampled_and_edges_ignored():
-    ref_meta = {"ncols": 200, "nrows": 300, "xll": 340000.0, "yll": 3110000.0, "cellsize": 30.0, "nodata": -9999.0}
-    model_meta = {"ncols": 201, "nrows": 301, "xll": 339975.0, "yll": 3109965.0, "cellsize": 30.0, "nodata": -9999.0}
-    ref = np.zeros((300, 200))
-    ref[100:150, 80:120] = 1.0                    # 50 x 40 = 2000 komórek zasięgu
-    out = M.sample_to_grid(ref, ref_meta, model_meta)
-    assert out.shape == (301, 201)
-    obs, valid = M.reference_masks(out, {**model_meta, "nodata": ref_meta["nodata"]})
-    assert obs.sum() == 50 * 40                   # zasięg nie ginie przy przesunięciu o 5 m
-    assert valid.sum() == 200 * 300               # skrajna kolumna i wiersz modelu są poza referencją

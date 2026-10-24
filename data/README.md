@@ -34,4 +34,3 @@ python -m ravaflow_tools.check_inputs data/nepal --volume 200e6 --cellsize 30 --
 Skrypt wypisuje listę błędów i ostrzeżeń; kod wyjścia 1 oznacza, że dane nie spełniają kontraktu.
 `--volume` to objętość, którą założyliście przy tworzeniu `release_height.tif` (w m³).
 
-

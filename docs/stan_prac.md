@@ -1,6 +1,8 @@
 # Stan prac: co zrobiono, jakie eksperymenty i co one oznaczają
 
-Wyniki w częściach 2 i 3 pochodzą z przykładu szkoleniowego Cascadia i z danych syntetycznych, a nie z Nepalu.
+Stan na 21 października 2026. Dokument jest dziennikiem tego, co zostało sprawdzone, z konkretnymi liczbami,
+oraz listą rzeczy, które jeszcze trzeba zrobić. Wszystkie wyniki w części 2 pochodzą z **przykładu szkoleniowego
+Cascadia dołączonego do r.avaflow**, a nie z Nepalu.
 
 ## 1. Zrobione
 
@@ -8,14 +10,17 @@ Wyniki w częściach 2 i 3 pochodzą z przykładu szkoleniowego Cascadia i z dan
 |---|---|
 | Instalacja | GRASS GIS 8.3.2, r.avaflow 4.0G Revision 7 (2 IX 2025), R i jego pakiety, lokalizacja GRASS `xy_loc` (Ubuntu 24.04) |
 | Test dymny r.avaflow | przykład Cascadia, eksperymenty 1 i 2: przeszły, wbudowane wykresy działają |
-| Wrapper Pythona | `runner.py`: konfiguracja YAML → skrypt startowy → GRASS (`--exec`) → wyniki, czas, parser oceny; sprawdzony na Cascadia exp. 2 oraz danych syntetycznych|
-| Metryki własne | `metrics.py`: Jaccard, precision, recall, F1, stosunek pól, Hausdorff; zgodne z CSI z r.avaflow (0,556 vs 0,549) (0,535 vs 0,525 na danych syntetycznych)|
+| Wrapper Pythona | `runner.py`: konfiguracja YAML → skrypt startowy → GRASS (`--exec`) → wyniki, czas, parser oceny; sprawdzony na Cascadia exp. 2 |
+| Metryki własne | `metrics.py`: Jaccard, precision, recall, F1, stosunek pól, Hausdorff; zgodne z CSI z r.avaflow (0,556 vs 0,549) |
 | Wizualizacja | `viz.py`/`score.py`: mapa zgodności zasięgu, mapa maksymalnej grubości, animacja GIF |
 | Walidator danych | `check_inputs.py`: sprawdza kontrakt danych; przetestowany na danych poprawnych i celowo zepsutych |
-| Dane syntetyczne | `synthetic.py`: zestaw w formacie kontraktu (GeoTIFF lub ASCII) do testu łańcucha, łańcuch przeszedł end-to-end na GeoTIFF w EPSG:32645 |
-| Scenariusze | `scenarios.py`: S2 (skalowanie masy), S1 (tama w NMT), nadpisanie parametrów (S3); przygotowanie rastrów przetestowane, uruchomienie serii na r.avaflow: następny etap|
-| Testy automatyczne | 13 testów (`python -m pytest -q`), bez GRASS-a |
+| Dane syntetyczne | `synthetic.py`: zestaw w formacie kontraktu (GeoTIFF lub ASCII) do testu łańcucha |
+| Scenariusze | `scenarios.py`: S2 (skalowanie masy), S1 (tama w NMT), nadpisanie parametrów (S3); przygotowanie rastrów przetestowane |
+| Testy automatyczne | 11 testów (`python -m pytest -q`), bez GRASS-a |
 | Dokumentacja | README, instrukcja uruchomienia, opis naukowy, ten plik |
+
+**Nie zostało jeszcze zweryfikowane:** przebieg na danych syntetycznych w GeoTIFF przez r.avaflow, wczytywanie
+GeoTIFF-ów w naszym kodzie na prawdziwym sprzęcie (testy używają ASCII), uruchomienie scenariuszy przez GRASS-a.
 
 ## 2. Eksperymenty na przykładzie Cascadia
 
@@ -65,34 +70,3 @@ SPI 0,701.
    wyjścia pod kalibrację: poprawa Jaccarda ma przyjść ze zmiany parametrów, nie z kodu oceny.
 4. **Nie wolno z tego wnioskować o jakości r.avaflow na zdarzeniu z Nepalu.** To przykład szkoleniowy, a sama
    odległość Hausdorffa (424 m) jest wrażliwa na pojedyncze odstające komórki.
-
-## 3. Test łańcucha na danych syntetycznych (format kontraktu danych)
-
-Dane z `synthetic.py` (GeoTIFF, EPSG:32645, siatka 200 × 300 komórek po 30 m), parametry z Cascadia exp. 2
-(niekalibrowane), czas symulacji 400 s. Zasięg „rzeczywisty" jest wymyślony.
-
-| Miara | r.avaflow | Nasz kod (`score`) |
-|---|---|---|
-| Jaccard e (CSI) | 0,525 | 0,535 |
-| stosunek pól (FoC) | 1,388 | 1,392 |
-| precision / recall | | 0,599 / 0,833 |
-| F1 | | 0,697 |
-| TP / FP / FN | | 2054 / 1377 / 411 komórek |
-| odległość Hausdorffa | | 1984 m |
-| czas modelu | 472 s | |
-
-**Co to znaczy:**
-
-1. **Łańcuch działa na danych w formacie kontraktu**: walidator zaakceptował GeoTIFF i EPSG:32645,
-   r.avaflow zaimportował rastry z dużymi współrzędnymi UTM, `score` policzył metryki.
-2. **Jaccard nic nie mówi o jakości modelu**, bo zasięg jest wymyślony.
-3. **Różnica 0,525 vs 0,535.** Siatka wyjściowa r.avaflow ma 201 × 301 komórek, referencja 200 × 300, a róg
-   modelu jest przesunięty o 5 m. Z ułamków w `*_evaluation.txt` wynika różnica ok. 30 komórek na brzegu
-   zasięgu (ok. 1,3% jego pola), co jest spójne z przesunięciem siatek.
-4. **Metryki zależne od TN (HSS, AUROC, D2PC, SPI) z r.avaflow nie są porównywalne z naszymi**: wynika z nich,
-   że r.avaflow liczy je na mniejszej domenie (ok. 15 tys. komórek zamiast ok. 60 tys. u nas). Jaccard,
-   precision, recall i F1 nie zależą od TN. Do porównania modeli używamy tylko metryk z `metrics.py`.
-5. **Koszt:** 472 s dla siatki 200 × 300 i 400 s symulacji, ok. 5 razy więcej niż Cascadia (ok. 100 s).
-   Obszar Langtang–Trishuli będzie wielokrotnie większy, więc trzeba ustalić obszar i rozdzielczość
-   kalibracji (RQ5). `model_seconds` zapisujemy zawsze.   
-

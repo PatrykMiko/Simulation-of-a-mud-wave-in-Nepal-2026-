@@ -1,6 +1,28 @@
-## r.avaflow
+# Jak działa model: strona naukowa
 
-### Co robi
+## 1. Problem fizyczny
+
+Zdarzenie z 26 sierpnia 2026 w Langtang: zawalenie skał i lodowca przekształciło się w spływ gruzowy i powódź
+na ok. 100 km wzdłuż rzek Lende Khola i Trishuli. Mamy kaskadę procesów: lawina skalno-lodowa, uwodnienie
+i unoszenie materiału po drodze, przejście w spływ gruzowy, powódź. Wstępne szacunki objętości źródła mocno się
+różnią (od ok. 55 mln ton lodu i skał do 200 mln m³ z inwersji sejsmicznej), więc objętość traktujemy jako
+niepewną (plan przewiduje przedział ok. 20–200 mln m³).
+
+## 2. Dwie klasy modeli w projekcie
+
+| | SCIDDICA-SS3 | r.avaflow v4 |
+|---|---|---|
+| Typ | automat komórkowy, jedna faza efektywna | model ciągły, wielofazowy, open source (GRASS GIS) |
+| Rola | model prosty, szybki, przejrzysty | model odniesienia fizycznego |
+| Woda i lód | brak osobnych faz (jeden efektywny materiał) | rozdzielone fazy, unoszenie, zatrzymanie i depozycja |
+| Ograniczenia | walidowany na mniejszych zdarzeniach | wymaga parametrów reologicznych, cięższy obliczeniowo |
+
+(Opis wg planu projektu.) Porównanie obu modeli na jednym zdarzeniu, z identycznym protokołem, jest wartością
+naukową projektu.
+
+## 3. r.avaflow
+
+### 3.1 Co robi
 
 r.avaflow to narzędzie do symulacji spływów masowych (lawiny, spływy gruzowe, powodzie, kaskady procesów),
 działające jako zestaw modułów GRASS GIS. Według planu i artykułu o wersji 4 (Mergili i in. 2025, GMD 18:
@@ -8,7 +30,7 @@ działające jako zestaw modułów GRASS GIS. Według planu i artykułu o wersji
 materiału. Oferuje model mieszaniny typu Voellmy oraz model wielofazowy, a wersja 4 dodaje model warstwowy,
 który ma ułatwiać symulację oddziaływania osuwiska ze zbiornikiem (przydatne w scenariuszu z tamą). 
 
-### Idea modelu uśrednionego po głębokości 
+### 3.2 Idea modelu uśrednionego po głębokości (ogólna wiedza, *do weryfikacji* w artykułach)
 
 Zamiast rozwiązywać przepływ w trzech wymiarach, model opisuje masę przez grubość przepływu `h(x, y, t)` i
 prędkość uśrednioną po grubości `u(x, y, t)`. Schematycznie dla jednej fazy:
@@ -25,7 +47,7 @@ parametry unoszenia) są w artykułach Mergili i in. 2017 (GMD 10: 553–569) or
 Schemat numeryczny jest wysokiej rozdzielczości. Krok czasowy dobierany jest
 adaptacyjnie wg warunku CFL; w naszych logach liczba CFL oscylowała wokół 0,37–0,40.
 
-### Dane wejściowe (jak je rozumie r.avaflow)
+### 3.3 Dane wejściowe (jak je rozumie r.avaflow)
 
 | Wejście | Parametr r.avaflow | W naszym kontrakcie |
 |---|---|---|
@@ -39,25 +61,26 @@ adaptacyjnie wg warunku CFL; w naszych logach liczba CFL oscylowała wokół 0,3
 Konwencja wysokości: suma `elevation` i `release_height` ma dawać teren sprzed zdarzenia. Poza obszarem odrywania
 `release_height` ma być dokładnie 0.
 
-### Wyniki
+### 3.4 Wyniki
 
 Dla każdego kroku czasu: grubość przepływu (`hflow`) i jego frakcji, a także maksima w czasie (`*_max`), czas
 dojścia czoła (`treach`), wykresy i animacje, plik z oceną względem `impactarea` i czas obliczeń. Układ plików
 opisuje `docs/uruchamianie.md`, część 4. W logu przebiegu każdy krok wypisuje m.in. maksymalną grubość, maksymalną
 prędkość, objętość i energię kinetyczną, co pozwala ocenić, kiedy masa się zatrzymuje.
 
-## Jak oceniamy wyniki (to jest nasz kod, `ravaflow_tools/metrics.py`)
+## 4. Jak oceniamy wyniki (to jest nasz kod, `ravaflow_tools/metrics.py`)
 
-### Zasięg modelu i zasięg rzeczywisty
+### 4.1 Zasięg modelu i zasięg rzeczywisty
 
 - **Zasięg modelu S:** komórki, w których maksymalna w czasie grubość przepływu `h_max ≥ 0,1 m` (próg ustawiany w
   konfiguracji, domyślnie 0,1 m, tak jak pierwsza wartość parametru `thresholds` w r.avaflow). Próg zmienia wynik,
   więc **musi być identyczny dla r.avaflow i SS3**.
 - **Zasięg rzeczywisty R:** raster z konwencją: > 0 zasięg, 0 brak, ujemne lub brak danych = nieznane. Komórki
   nieznane są wyłączone z liczenia metryk.
-- Jeśli siatka referencji różni się od siatki modelu (rozmiarem komórki, liczbą kolumn i wierszy albo położeniem rogu), referencja jest próbkowana na siatkę modelu metodą najbliższego sąsiada, a komórki poza jej zasięgiem są pomijane. Komunikat [uwaga] wylicza, co się różni (grid_differences w metrics.py). Wprowadza to niewielką rozbieżność: 0,549 wg r.avaflow vs 0,556 wg nas w Cascadia (inny rozmiar komórki), 0,525 vs 0,535 na danych syntetycznych (siatka modelu o jeden wiersz i kolumnę większa i przesunięta o 5 m). r.avaflow zwraca siatkę przesuniętą względem danych wejściowych, więc ten komunikat pojawia się przy każdym przebiegu.
+- Jeśli siatka referencji różni się od siatki modelu, referencja jest próbkowana na siatkę modelu metodą
+  najbliższego sąsiada (to wprowadza niewielką rozbieżność; w teście Cascadia: 0,549 wg r.avaflow vs 0,556 wg nas).
 
-### Metryki
+### 4.2 Metryki
 
 Niech TP, FP, FN, TN to liczby komórek (zgodne, nadmiar modelu, niedobór modelu, zgodny brak zasięgu).
 
@@ -74,13 +97,13 @@ Niech TP, FP, FN, TN to liczby komórek (zgodne, nadmiar modelu, niedobór model
 używamy ilorazu (zgodnie z SS3 i z CSI w r.avaflow). Nie mylić z SPI (synthetic performance index) z pliku
 `*_evaluation.txt`, który jest inną miarą.
 
-### Czego te metryki nie mówią
+### 4.3 Czego te metryki nie mówią
 
 - Zgodność zasięgu nie oznacza zgodności dynamiki (grubość złoża, czas dojścia czoła): to RQ2. Dobry obrys może
   wynikać z przypadkowej kombinacji parametrów (ekwifinalność, RQ4).
 - Dane o dynamice (czasy, przepływy) są wstępne i medialne, więc do kontroli jakościowej, nie do kalibracji.
 
-## Założenia i ograniczenia
+## 5. Założenia i ograniczenia
 
 1. **Parametry reologiczne są słabo ograniczone.** Autorzy r.avaflow wprost zaznaczają, że potrzebne są dalsze
    badania parametrów, zanim symulacje będą wiarygodne w prognozach (Mergili i in. 2017), a w pracy o Piz Cengalo
@@ -95,7 +118,7 @@ używamy ilorazu (zgodnie z SS3 i z CSI w r.avaflow). Nie mylić z SPI (syntheti
 5. **Różnica modeli:** SS3 nie ma wody ani lodu, więc w scenariuszach zmieniających udział lodu i wody jego
    reakcję trzeba modelować przez parametry mobilności, co jest arbitralne i musi być jawnie zaznaczone.
 
-## Słownik
+## 6. Słownik
 
 | Termin | Znaczenie |
 |---|---|
@@ -108,4 +131,3 @@ używamy ilorazu (zgodnie z SS3 i z CSI w r.avaflow). Nie mylić z SPI (syntheti
 | CSI | critical success index, w r.avaflow to samo co Jaccard |
 | mapset / lokalizacja (GRASS) | katalog roboczy GRASS-a; nasza lokalizacja `xy_loc` ma generyczny układ XY |
 
-Wskaźniki HSS, AUROC, D2PC i SPI z pliku *_evaluation.txt zależą od liczby komórek zgodnego braku zasięgu (TN) i od domeny oceny r.avaflow, więc nie są porównywalne z SS3 ani z naszymi metrykami.
