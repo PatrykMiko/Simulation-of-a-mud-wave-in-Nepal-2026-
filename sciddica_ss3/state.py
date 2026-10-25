@@ -66,7 +66,7 @@ class ModelParameters:
     pml: float = 0.25
     pwr: float = 0.10
     rho_water: float = 1000.0
-    alpha_scale: float = 1.0
+    alpha_scale: float = 0.25
 
     def __post_init__(self) -> None:
         if not all(np.isfinite(value) and value > 0 for value in (self.pc, self.pt, self.rho)):

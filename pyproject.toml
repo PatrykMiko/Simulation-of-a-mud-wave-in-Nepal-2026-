@@ -11,6 +11,9 @@ dependencies = [
     "matplotlib>=3.8",
     "scipy>=1.18.1",
     "pyyaml>=6.0.3",
+    "rasterio>=1.5.2",
+    "tqdm>=4.66",
+    "numba>=0.68.0",
 ]
 
 [project.scripts]
@@ -20,3 +23,8 @@ sciddica-ss3 = "sciddica_ss3.cli:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["sciddica_ss3*", "ravaflow_tools*"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

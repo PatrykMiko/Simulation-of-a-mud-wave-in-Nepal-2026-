@@ -5,3 +5,4 @@ pyyaml
 rasterio
 imageio
 pytest
+tqdm

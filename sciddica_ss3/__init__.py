@@ -16,7 +16,7 @@ from .state import MediumParameters, ModelParameters, FlowState, OutflowPhase, S
 from .flow import minimization_algorithm, momentum_elevation_correction
 from .automaton import SciddicaSS3
 from .scenario import make_albano_like, jaccard_fitness
-from .visualize import run_headless, animate
+from .visualize import run_headless, animate, plot_summary, hillshade
 
 __all__ = [
     "GRAVITY", "EPS", "MIN_THICKNESS", "SQRT3",
@@ -25,5 +25,5 @@ __all__ = [
     "MediumParameters", "ModelParameters", "FlowState", "OutflowPhase", "ShiftResult",
     "minimization_algorithm", "momentum_elevation_correction",
     "SciddicaSS3", "make_albano_like", "jaccard_fitness",
-    "run_headless", "animate",
+    "run_headless", "animate", "plot_summary", "hillshade",
 ]

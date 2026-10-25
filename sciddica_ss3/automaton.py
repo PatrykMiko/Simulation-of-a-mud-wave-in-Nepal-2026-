@@ -22,17 +22,20 @@ class SciddicaSS3:
         soil_depth: np.ndarray,
         params: ModelParameters | None = None,
         water_level: float | None = None,
+        use_float32: bool = False,
     ) -> None:
         self.params = params or ModelParameters()
+        self.use_float32 = bool(use_float32)
+        self._dtype = np.float32 if self.use_float32 else float
 
         if water_level is not None and not np.isfinite(water_level):
             raise ValueError("water_level must be finite or None")
 
         self.water_level = water_level
 
-        a = np.asarray(altitude, dtype=float)
-        th = np.asarray(thickness, dtype=float)
-        soil = np.asarray(soil_depth, dtype=float)
+        a = np.asarray(altitude, dtype=self._dtype)
+        th = np.asarray(thickness, dtype=self._dtype)
+        soil = np.asarray(soil_depth, dtype=self._dtype)
 
         if a.ndim != 2 or th.shape != a.shape or soil.shape != a.shape:
             raise ValueError(
@@ -67,6 +70,11 @@ class SciddicaSS3:
         self.steps_completed = 0
 
         self._inside = neighbour_stack(np.ones_like(a), fill_value=0.0) > 0.5
+        # Pre-allocate reusable arrays to reduce allocations
+        self._zeros_hw = np.zeros((self.height, self.width), dtype=self._dtype)
+        self._zeros_6hw = np.zeros((6, self.height, self.width), dtype=self._dtype)
+        self._ones_hw = np.ones((self.height, self.width), dtype=self._dtype)
+        self._inf_hw = np.full((self.height, self.width), np.inf, dtype=self._dtype)
 
     @property
     def altitude(self) -> np.ndarray:
@@ -341,6 +349,45 @@ class SciddicaSS3:
         )
 
     def step(self) -> None:
+        """Advance one step, computing only on a window around the debris."""
+        full_state = self.state
+        full_inside = self._inside
+
+        occupied = full_state.thickness > 0.0
+        rows = np.flatnonzero(occupied.any(axis=1))
+
+        if rows.size == 0:
+            self._step_full()          # nothing moving: keeps time/counters consistent
+            return
+
+        cols = np.flatnonzero(occupied.any(axis=0))
+        margin = 3                     # >= 2 is required; 3 leaves headroom
+        r0 = max(int(rows[0]) - margin, 0)
+        r1 = min(int(rows[-1]) + margin + 1, self.height)
+        q0 = max(int(cols[0]) - margin, 0)
+        q1 = min(int(cols[-1]) + margin + 1, self.width)
+
+        # Window covers most of the grid: slicing would only add copies.
+        if (r1 - r0) * (q1 - q0) > 0.6 * self.height * self.width:
+            self._step_full()
+            return
+
+        window = (slice(r0, r1), slice(q0, q1))
+
+        self.state = FlowState(
+            **{name: value[window].copy() for name, value in vars(full_state).items()}
+        )
+        self._inside = full_inside[:, window[0], window[1]]
+
+        try:
+            self._step_full()
+            for name, value in vars(self.state).items():
+                getattr(full_state, name)[window] = value
+        finally:
+            self.state = full_state
+            self._inside = full_inside
+
+    def _step_full(self) -> None:
         """Advance the grid by one synchronous cellular-automaton step."""
         st = self.state
         p = self.params
@@ -350,6 +397,15 @@ class SciddicaSS3:
         a = st.altitude
         th = st.thickness
         kh = st.kinetic_head
+
+        # Active set: cells with thickness above threshold or in neighborhood of active cells
+        active_mask = th > (MIN_THICKNESS * 10.0)
+        if np.any(active_mask):
+            # Expand to include neighbors (1-ring)
+            active_nb = neighbour_stack(active_mask.astype(float), fill_value=0.0)
+            active_region = active_mask | (np.any(active_nb > 0.5, axis=0))
+        else:
+            active_region = np.zeros_like(th, dtype=bool)
 
         sub_nb = neighbour_stack(submerged.astype(float), fill_value=0.0) > 0.5
         a_nb = neighbour_stack(a, fill_value=np.inf)
@@ -363,12 +419,16 @@ class SciddicaSS3:
             thickness=th,
             momentum_x=st.momentum_x,
             momentum_y=st.momentum_y,
+            kinetic_head=kh,
+            barycentre_x=st.barycentre_x,
+            barycentre_y=st.barycentre_y,
             params=p,
         )
-
         phase1_neighbour_heights = neighbour_bed_surface + correction
 
         allowed1 = self._inside & ((bed_surface[None, :, :] - phase1_neighbour_heights) > pf[None, :, :])
+        if np.any(active_region):
+            allowed1 = allowed1 & active_region[None, :, :]
 
         requested1 = minimization_algorithm(
             movable_mass=np.maximum(th - adh, 0.0),
@@ -381,7 +441,7 @@ class SciddicaSS3:
             requested=requested1,
             kinetic_head=kh,
             source_surface_for_shift=bed_surface,
-            neighbour_surface_for_shift=phase1_neighbour_heights,
+            neighbour_surface_for_shift=neighbour_bed_surface,
             submerged=submerged,
             neighbour_submerged=sub_nb,
             friction=friction,
@@ -415,11 +475,27 @@ class SciddicaSS3:
             phase=phase1,
         )
 
-        # Phase 2
-        surface_after1 = a + th_after1
-        neighbour_surface_after1 = a_nb + th_nb + phase1.received
+        # Phase 2: reconstruct the intermediate surface after Phase 1.
+        phase1_inflow = np.zeros_like(th)
+
+        for direction, (dq, dr) in enumerate(NEIGHBOUR_OFFSETS):
+            phase1_inflow += shifted(
+                phase1.received[direction],
+                -dq,
+                -dr,
+                0.0,
+            )
+
+        surface_after1 = a + th_after1 + phase1_inflow
+
+        neighbour_surface_after1 = neighbour_stack(
+            surface_after1,
+            fill_value=np.inf,
+        )
 
         allowed2 = self._inside & ((surface_after1[None, :, :] - neighbour_surface_after1) > pf[None, :, :])
+        if np.any(active_region):
+            allowed2 = allowed2 & active_region[None, :, :]
 
         residual_mass_after1 = np.maximum(th - phase1.requested.sum(axis=0), 0.0)
 
@@ -590,22 +666,50 @@ class SciddicaSS3:
 
         for direction in range(6):
             speed = np.sqrt(
-                2.0 * GRAVITY * np.maximum(phase.shifted_kinetic_head[direction], 0.0)
+                2.0 * GRAVITY
+                * np.maximum(phase.shifted_kinetic_head[direction], 0.0)
             )
+
             internal_momentum = (
-                self.params.rho * self.params.cell_area * phase.internal[direction] * speed
+                self.params.rho
+                * self.params.cell_area
+                * phase.internal[direction]
+                * speed
             )
+
+            # Do not create directional momentum when the cylinder
+            # did not actually shift in this direction.
+            moved = phase.travelled[direction] > EPS
+            internal_momentum = np.where(
+                moved,
+                internal_momentum,
+                0.0,
+            )
+
             px += internal_momentum * DIRECTION_X[direction]
             py += internal_momentum * DIRECTION_Y[direction]
 
         return px, py
     
-    def run(self, steps: int, callback=None) -> None:
-        """Run a number of transitions, optionally calling callback(model, i)."""
+    def run(self, steps: int, callback=None, progress: bool = True) -> None:
+        """Run a number of transitions, optionally calling callback(model, i).
+
+        When ``progress`` is true and ``tqdm`` is available, a progress bar is
+        shown.  Pass ``progress=False`` to silence it (e.g. in tests).
+        """
         if steps < 0:
             raise ValueError("steps must be non-negative")
 
-        for i in range(steps):
+        iterator = range(steps)
+        if progress:
+            try:
+                from tqdm import tqdm
+
+                iterator = tqdm(range(steps), desc="steps", unit="step")
+            except ImportError:
+                pass
+
+        for i in iterator:
             self.step()
             if callback is not None:
                 callback(self, i)

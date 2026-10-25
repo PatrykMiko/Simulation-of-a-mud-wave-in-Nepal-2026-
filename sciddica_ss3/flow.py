@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .constants import EPS
+from .constants import EPS, GRAVITY, DIRECTION_X, DIRECTION_Y
 from .state import ModelParameters
 
 
@@ -98,37 +98,77 @@ def momentum_elevation_correction(
     thickness: np.ndarray,
     momentum_x: np.ndarray,
     momentum_y: np.ndarray,
+    kinetic_head: np.ndarray,
+    barycentre_x: np.ndarray,
+    barycentre_y: np.ndarray,
     params: ModelParameters,
 ) -> np.ndarray:
-    """Compute SS3 fictitious elevation corrections for six neighbours."""
+    """Fictitious-slope correction w(i) for the six neighbours (SS3, phase 1).
+
+    - Magnitude from kinetic head: p/(rho*A) = th * sqrt(2 g kh)   (paper's formula),
+      with speed capped at one cell spacing per step (the CA cannot move farther).
+    - Direction from the momentum vector, split between the two faces whose
+      directions (seen from the barycentre) bracket it.
+    - Result is bounded: |w| <= 2 * th * alpha_scale-independent cap (see below).
+    """
     th = np.asarray(thickness, dtype=float)
     px = np.asarray(momentum_x, dtype=float)
     py = np.asarray(momentum_y, dtype=float)
+    kh = np.maximum(np.asarray(kinetic_head, dtype=float), 0.0)
+    bx = np.asarray(barycentre_x, dtype=float)
+    by = np.asarray(barycentre_y, dtype=float)
 
-    if px.shape != th.shape or py.shape != th.shape:
-        raise ValueError("thickness and momentum arrays must share shape")
+    if not (px.shape == py.shape == kh.shape == bx.shape == by.shape == th.shape):
+        raise ValueError("all (H, W) inputs must share shape")
 
-    magnitude = np.hypot(px, py) / (params.rho * params.cell_area)
+    spacing = params.centre_spacing
+    apothem = spacing / 2.0
 
-    moving = (magnitude > EPS) & (th > EPS)
+    # 1. magnitude from energy, bounded by one cell per step
+    speed = np.minimum(np.sqrt(2.0 * GRAVITY * kh), spacing / params.pt)
+    magnitude = th * speed                       # = p / (rho * A)
 
-    angle_sector = (np.arctan2(py, px) % (2.0 * np.pi)) / (np.pi / 3.0)
+    moving = (magnitude > EPS) & (th > EPS) & (np.hypot(px, py) > EPS)
+    theta = np.arctan2(py, px)
 
-    lower = np.floor(angle_sector).astype(int) % 6
-    fraction = angle_sector - np.floor(angle_sector)
+    # 2. keep the barycentre well inside the polygon of face midpoints
+    #    (its inradius is 0.866*apothem) so the six face directions surround it
+    #    in index order and every angular gap stays < 180 degrees.
+    r_max = 0.6 * apothem
+    r = np.hypot(bx, by)
+    scale = np.minimum(1.0, np.divide(r_max, r, out=np.ones_like(r), where=r > EPS))
+    bx = bx * scale
+    by = by * scale
 
-    shares = np.zeros((6, *th.shape), dtype=float)
+    # 3. angles of the six face midpoints seen from the barycentre.
+    #    Relative to face 0 they increase monotonically with the face index.
+    face_x = apothem * DIRECTION_X[:, None, None] - bx[None]
+    face_y = apothem * DIRECTION_Y[:, None, None] - by[None]
+    face_angles = np.arctan2(face_y, face_x)
+    rel = np.mod(face_angles - face_angles[0], 2.0 * np.pi)       # rel[0] == 0
+    t_rel = np.mod(theta - face_angles[0], 2.0 * np.pi)
 
-    for direction in range(6):
-        shares[direction] = magnitude * (
-            np.where(lower == direction, 1.0 - fraction, 0.0)
-            + np.where(
-                (lower + 1) % 6 == direction,
-                fraction,
-                0.0,
-            )
-        )
+    lower = np.clip(np.sum(t_rel[None] >= rel, axis=0) - 1, 0, 5)
+    upper = (lower + 1) % 6
 
-    shares = np.where(moving[None, :, :], shares, 0.0)
+    rel_lower = np.take_along_axis(rel, lower[None], axis=0)[0]
+    rel_upper = np.take_along_axis(rel, upper[None], axis=0)[0]
+    rel_upper = np.where(lower == 5, 2.0 * np.pi, rel_upper)
 
-    return params.alpha * (np.roll(shares, 3, axis=0) - shares)
+    fraction = np.clip(
+        (t_rel - rel_lower) / np.maximum(rel_upper - rel_lower, EPS), 0.0, 1.0
+    )
+
+    # 4. shares on two ADJACENT faces (never opposite, so no cancellation)
+    k = np.arange(6)[:, None, None]
+    shares = magnitude[None] * (
+        np.where(k == lower[None], 1.0 - fraction[None], 0.0)
+        + np.where(k == upper[None], fraction[None], 0.0)
+    )
+    shares = np.where(moving[None], shares, 0.0)
+
+    # 5. lower the privileged faces, raise their opposites, and bound the result:
+    #    a drop of 2*th already moves the entire mass one cell.
+    w = params.alpha * (np.roll(shares, 3, axis=0) - shares)
+    cap = 2.0 * th[None]
+    return np.clip(w, -cap, cap)

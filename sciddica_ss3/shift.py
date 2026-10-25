@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import numpy as np
+from numba import njit, prange
 
 from .constants import EPS, GRAVITY, DIRECTION_X, DIRECTION_Y
 from .state import ModelParameters, ShiftResult
@@ -14,15 +15,7 @@ def _medium_arrays(
     params: ModelParameters,
 ) -> tuple[np.ndarray, ...]:
     """Expand air/water parameter selection to cellwise arrays."""
-    names = (
-        "adh",
-        "pf",
-        "pmt",
-        "per",
-        "ptd",
-        "ped",
-        "shift_friction",
-    )
+    names = ("adh", "pf", "pmt", "per", "ptd", "ped", "shift_friction")
 
     values: list[np.ndarray] = []
 
@@ -76,6 +69,122 @@ def _circle_segment(
     return fraction, external_centroid, internal_centroid
 
 
+@njit(cache=True)
+def _circle_segment_scalar(z, r, eps):
+    zc = min(max(z, -r), r)
+    rad = max(r * r - zc * zc, 0.0)
+    root = np.sqrt(rad)
+    cap = r * r * np.arccos(zc / r) - zc * root
+    total = np.pi * r * r
+    internal = max(total - cap, 0.0)
+    frac = min(max(cap / total, 0.0), 1.0)
+    fm = (2.0 / 3.0) * rad ** 1.5
+    ec = fm / cap if cap > eps else 0.0
+    ic = -fm / internal if internal > eps else 0.0
+    if frac >= 1.0 - 1e-12:
+        ec = 0.0
+    if frac <= 1e-12:
+        ic = 0.0
+    return frac, ec, ic
+
+
+@njit(cache=True, parallel=True, error_model="numpy")
+def _shift_kernel(
+    kh_in, src, nb, bx, by, fc, sub, active,
+    spacing, dt, g, g_sub, wr, ux, uy, eps,
+    fractions, travelled, heads, ibx, iby, ebx, eby,
+):
+    N = kh_in.size
+    apothem = spacing / 2.0
+    for i in prange(N):
+        kh = max(kh_in[i], 0.0)
+
+        # inert defaults, identical to the dense version for cells that cannot move
+        for d in range(6):
+            fractions[d, i] = 0.0
+            travelled[d, i] = 0.0
+            heads[d, i] = kh
+            ibx[d, i] = bx[i]
+            iby[d, i] = by[i]
+            ebx[d, i] = 0.0
+            eby[d, i] = 0.0
+
+        if not active[i]:
+            continue
+
+        speed0 = np.sqrt(2.0 * g * kh)
+        is_sub = sub[i]
+
+        for d in range(6):
+            pb = bx[i] * ux[d] + by[i] * uy[d]
+            dx = spacing * ux[d] - bx[i]
+            dy = spacing * uy[d] - by[i]
+            hdist = max(np.sqrt(dx * dx + dy * dy), eps)
+
+            drop = src[i] - nb[d, i]
+            theta = np.arctan2(drop, hdist)
+            can_move = (drop + kh) >= fc[i] * hdist
+
+            gacc = g_sub if is_sub else g
+            acc = gacc * (np.sin(theta) - fc[i] * np.cos(theta))
+
+            if is_sub and wr > eps:
+                decay = np.exp(-wr * dt)
+                sp = speed0 * decay + (acc / wr) * (1.0 - decay)
+                sh = (speed0 * (1.0 - decay) / wr
+                      + (acc / wr) * (dt - (1.0 - decay) / wr))
+                den = wr * speed0 - acc
+                ratio = -acc / den if den > eps else 1.0
+                ratio = min(max(ratio, eps), 1.0)
+                ts = -np.log(ratio) / wr
+                if acc < 0.0 and speed0 >= 0.0 and ts < dt:
+                    sd = np.exp(-wr * ts)
+                    sh = (speed0 * (1.0 - sd) / wr
+                          + (acc / wr) * (ts - (1.0 - sd) / wr))
+                    sp = 0.0
+                new_speed = max(sp, 0.0)
+                raw = sh
+            else:  # air, or water without drag
+                sp = max(speed0 + acc * dt, 0.0)
+                sh = speed0 * dt + 0.5 * acc * dt * dt
+                if acc < 0.0 and (speed0 + acc * dt) < 0.0:
+                    ts = -speed0 / acc if acc < -eps else 0.0
+                    ts = min(max(ts, 0.0), dt)
+                    sh = speed0 * ts + 0.5 * acc * ts * ts
+                    sp = 0.0
+                new_speed = sp
+                raw = sh
+
+            raw = max(raw, 0.0)
+            if not can_move:
+                raw = 0.0
+
+            remaining = max(spacing - pb, 0.0)
+            shift = min(raw, remaining)
+            if not can_move:
+                shift = 0.0
+
+            frac, cc, ic = _circle_segment_scalar(apothem - pb - shift, apothem, eps)
+            if not can_move:
+                frac = 0.0
+                cc = 0.0
+                ic = 0.0
+
+            perp_x = bx[i] - pb * ux[d]
+            perp_y = by[i] - pb * uy[d]
+            inner_along = pb + shift + ic
+            outer_along = pb + shift + cc - spacing
+
+            fractions[d, i] = frac
+            travelled[d, i] = shift
+            if can_move:
+                heads[d, i] = new_speed * new_speed / (2.0 * g)
+                ibx[d, i] = perp_x + inner_along * ux[d]
+                iby[d, i] = perp_y + inner_along * uy[d]
+            ebx[d, i] = perp_x + outer_along * ux[d]
+            eby[d, i] = perp_y + outer_along * uy[d]
+
+
 def _shift_fraction(
     kinetic_head: np.ndarray,
     source_surface: np.ndarray,
@@ -85,181 +194,61 @@ def _shift_fraction(
     shift_friction: np.ndarray,
     submerged: np.ndarray,
     params: ModelParameters,
+    active: np.ndarray | None = None,
 ) -> ShiftResult:
-    """Apply inherited SS2 shifting and cylinder-splitting geometry."""
-    kh = np.maximum(np.asarray(kinetic_head, dtype=float), 0.0)
+    """Shift all cells (or only those in `active`) with the numba kernel.
 
-    bx = np.asarray(barycentre_x, dtype=float)
-    by = np.asarray(barycentre_y, dtype=float)
-    fc = np.asarray(shift_friction, dtype=float)
-    sub = np.asarray(submerged, dtype=bool)
+    Inactive cells carry no outflow, so they receive inert defaults; every
+    later use multiplies those values by zero mass.
+    """
+    shape = np.shape(kinetic_head)
 
-    expected_shape = (6, *kh.shape)
+    def flat(a):
+        return np.ascontiguousarray(a, dtype=np.float64).ravel()
 
-    if neighbour_surface.shape != expected_shape:
-        raise ValueError("neighbour_surface must have shape (6, H, W)")
+    kh = flat(kinetic_head)
+    n = kh.size
 
-    if (
-        bx.shape != kh.shape
-        or by.shape != kh.shape
-        or fc.shape != kh.shape
-        or sub.shape != kh.shape
-    ):
-        raise ValueError("shift inputs must share shape (H, W)")
+    if active is None:
+        act = np.ones(n, dtype=np.bool_)
+    else:
+        act = np.ascontiguousarray(active, dtype=np.bool_).ravel()
 
-    fractions = np.zeros(expected_shape, dtype=float)
-    travelled = np.zeros(expected_shape, dtype=float)
+    out = [np.empty((6, n)) for _ in range(7)]
 
-    heads = np.broadcast_to(kh, expected_shape).copy()
-    internal_bx = np.broadcast_to(bx, expected_shape).copy()
-    internal_by = np.broadcast_to(by, expected_shape).copy()
+    _shift_kernel(
+        kh,
+        flat(source_surface),
+        np.ascontiguousarray(neighbour_surface, dtype=np.float64).reshape(6, n),
+        flat(barycentre_x),
+        flat(barycentre_y),
+        flat(shift_friction),
+        np.ascontiguousarray(submerged, dtype=np.bool_).ravel(),
+        act,
+        params.centre_spacing,
+        params.pt,
+        GRAVITY,
+        params.submerged_gravity,
+        params.pwr,
+        np.ascontiguousarray(DIRECTION_X, dtype=np.float64),
+        np.ascontiguousarray(DIRECTION_Y, dtype=np.float64),
+        EPS,
+        *out,
+    )
 
-    external_bx = np.zeros(expected_shape, dtype=float)
-    external_by = np.zeros(expected_shape, dtype=float)
+    def grid(a):
+        return a.reshape(6, *shape)
 
-    spacing = params.centre_spacing
-    apothem = spacing / 2.0
-
-    initial_speed = np.sqrt(2.0 * GRAVITY * kh)
-    submerged_g = params.submerged_gravity
-
-    for direction in range(6):
-        ux = DIRECTION_X[direction]
-        uy = DIRECTION_Y[direction]
-
-        projected_barycentre = bx * ux + by * uy
-
-        dx = spacing * ux - bx
-        dy = spacing * uy - by
-
-        horizontal_distance = np.maximum(np.hypot(dx, dy), EPS)
-
-        geometric_drop = source_surface - neighbour_surface[direction]
-
-        theta = np.arctan2(geometric_drop, horizontal_distance)
-
-        can_move = (geometric_drop + kh) >= fc * horizontal_distance
-
-        acceleration_gravity = np.where(sub, submerged_g, GRAVITY)
-
-        acceleration = acceleration_gravity * (np.sin(theta) - fc * np.cos(theta))
-
-        speed0 = initial_speed
-        dt = params.pt
-
-        # Subaerial constant-acceleration shift
-        air_speed = np.maximum(speed0 + acceleration * dt, 0.0)
-        air_shift = speed0 * dt + 0.5 * acceleration * dt * dt
-
-        air_stops = (acceleration < 0.0) & ((speed0 + acceleration * dt) < 0.0)
-        stopping_time = np.divide(
-            -speed0,
-            acceleration,
-            out=np.zeros_like(speed0),
-            where=acceleration < -EPS,
-        )
-        stopping_time = np.clip(stopping_time, 0.0, dt)
-        stopping_shift = speed0 * stopping_time + 0.5 * acceleration * stopping_time**2
-        air_shift = np.where(air_stops, stopping_shift, air_shift)
-        air_speed = np.where(air_stops, 0.0, air_speed)
-
-        # Subaqueous motion under linear drag
-        wr = params.pwr
-
-        if wr > EPS:
-            decay = np.exp(-wr * dt)
-            water_speed = speed0 * decay + (acceleration / wr) * (1.0 - decay)
-            water_shift = (
-                speed0 * (1.0 - decay) / wr
-                + (acceleration / wr) * (dt - (1.0 - decay) / wr)
-            )
-            stop_denominator = wr * speed0 - acceleration
-            stop_ratio = np.divide(
-                -acceleration,
-                stop_denominator,
-                out=np.ones_like(speed0),
-                where=stop_denominator > EPS,
-            )
-            water_stopping_time = -np.log(np.clip(stop_ratio, EPS, 1.0)) / wr
-            water_stops = (
-                (acceleration < 0.0)
-                & (speed0 >= 0.0)
-                & (water_stopping_time < dt)
-            )
-            stop_decay = np.exp(-wr * water_stopping_time)
-            water_stopping_shift = (
-                speed0 * (1.0 - stop_decay) / wr
-                + (acceleration / wr)
-                * (water_stopping_time - (1.0 - stop_decay) / wr)
-            )
-            water_shift = np.where(water_stops, water_stopping_shift, water_shift)
-            water_speed = np.where(water_stops, 0.0, water_speed)
-        else:
-            water_speed = np.maximum(speed0 + acceleration * dt, 0.0)
-            water_shift = speed0 * dt + 0.5 * acceleration * dt * dt
-            water_stops = (acceleration < 0.0) & ((speed0 + acceleration * dt) < 0.0)
-            water_stopping_time = np.divide(
-                -speed0,
-                acceleration,
-                out=np.zeros_like(speed0),
-                where=acceleration < -EPS,
-            )
-            water_stopping_time = np.clip(water_stopping_time, 0.0, dt)
-            water_stopping_shift = (
-                speed0 * water_stopping_time + 0.5 * acceleration * water_stopping_time**2
-            )
-            water_shift = np.where(water_stops, water_stopping_shift, water_shift)
-            water_speed = np.where(water_stops, 0.0, water_speed)
-
-        new_speed = np.where(sub, np.maximum(water_speed, 0.0), air_speed)
-        raw_shift = np.where(sub, water_shift, air_shift)
-        raw_shift = np.maximum(raw_shift, 0.0)
-        raw_shift = np.where(can_move, raw_shift, 0.0)
-
-        remaining_to_centre = np.maximum(spacing - projected_barycentre, 0.0)
-        shift = np.minimum(raw_shift, remaining_to_centre)
-        shift = np.where(can_move, shift, 0.0)
-
-        signed_chord = apothem - projected_barycentre - shift
-        frac, cap_centroid, inner_centroid = _circle_segment(signed_chord, apothem)
-        frac = np.where(can_move, frac, 0.0)
-        cap_centroid = np.where(can_move, cap_centroid, 0.0)
-        inner_centroid = np.where(can_move, inner_centroid, 0.0)
-
-        perpendicular_x = bx - projected_barycentre * ux
-        perpendicular_y = by - projected_barycentre * uy
-
-        inner_along = projected_barycentre + shift + inner_centroid
-        outer_along = projected_barycentre + shift + cap_centroid - spacing
-
-        fractions[direction] = frac
-        travelled[direction] = shift
-        heads[direction] = np.where(
-            can_move,
-            new_speed * new_speed / (2.0 * GRAVITY),
-            kh,
-        )
-        internal_bx[direction] = np.where(
-            can_move,
-            perpendicular_x + inner_along * ux,
-            bx,
-        )
-        internal_by[direction] = np.where(
-            can_move,
-            perpendicular_y + inner_along * uy,
-            by,
-        )
-        external_bx[direction] = perpendicular_x + outer_along * ux
-        external_by[direction] = perpendicular_y + outer_along * uy
+    fractions, travelled, heads, ibx, iby, ebx, eby = (grid(a) for a in out)
 
     return ShiftResult(
         external_fraction=fractions,
         travelled=travelled,
         kinetic_head=np.maximum(heads, 0.0),
-        internal_barycentre_x=internal_bx,
-        internal_barycentre_y=internal_by,
-        external_barycentre_x=external_bx,
-        external_barycentre_y=external_by,
+        internal_barycentre_x=ibx,
+        internal_barycentre_y=iby,
+        external_barycentre_x=ebx,
+        external_barycentre_y=eby,
     )
 
 
