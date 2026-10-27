@@ -16,6 +16,7 @@ r.avaflow.40G/
 # --- dane: poza Gitem (patrz data/README.md) ---
 data/*
 !data/README.md
+!data/nepal
 
 # --- wyniki i pliki generowane przy przebiegach ---
 *_results/
