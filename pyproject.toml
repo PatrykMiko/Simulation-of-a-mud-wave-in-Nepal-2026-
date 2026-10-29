@@ -1,5 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "simulation-of-a-mud-wave-in-nepal-2026"
 version = "0.1.0"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "numpy>=1.26",
+    "matplotlib>=3.8",
+    "scipy>=1.18.1",
+    "pyyaml>=6.0.3",
+    "rasterio>=1.5.2",
+    "tqdm>=4.66",
+    "numba>=0.68.0",
+]
+
+[project.scripts]
+mud = "sciddica_ss3.cli:main"
+sciddica-ss3 = "sciddica_ss3.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sciddica_ss3*", "ravaflow_tools*"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

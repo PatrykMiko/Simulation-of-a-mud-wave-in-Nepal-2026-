@@ -4,6 +4,7 @@ venv/
 __pycache__/
 *.pyc
 .pytest_cache/
+uv.lock
 
 # --- ustawienia edytorów ---
 .idea/
@@ -24,3 +25,9 @@ data/*
 *.run.log
 *.run.sh
 scenarios_summary.csv
+simulation_of_a_mud_wave_in_nepal_2026.egg-info/dependency_links.txt
+simulation_of_a_mud_wave_in_nepal_2026.egg-info/entry_points.txt
+simulation_of_a_mud_wave_in_nepal_2026.egg-info/PKG-INFO
+simulation_of_a_mud_wave_in_nepal_2026.egg-info/requires.txt
+simulation_of_a_mud_wave_in_nepal_2026.egg-info/SOURCES.txt
+simulation_of_a_mud_wave_in_nepal_2026.egg-info/top_level.txt
