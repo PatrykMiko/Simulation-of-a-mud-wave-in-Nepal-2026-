@@ -18,6 +18,7 @@ r.avaflow.40G/
 data/*
 !data/README.md
 !data/nepal
+!data/calibration
 
 # --- wyniki i pliki generowane przy przebiegach ---
 *_results/
