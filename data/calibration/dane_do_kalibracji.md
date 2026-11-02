@@ -1,3 +1,31 @@
+# HUBSON
+**Parametry globalne i przygotowanie środowiska**
+
+Wszystkie warstwy rastrowe zostały ujednolicone do wspólnego układu współrzędnych EPSG:32645. Zastosowano stałą rozdzielczość przestrzenną 30 metrów oraz rygorystycznie wymuszono identyczną siatkę dla każdego pliku.
+
+**Masa obszaru odrywania (release\_height.tif)**
+
+Obszar źródłowy został wyznaczony na podstawie wektorowego poligonu, któremu przypisano atrybut grubości generujący docelową objętość 72.45 milionów metrów sześciennych (to zostanie zmienione - zarówno miejsce jak i grubość być może też). Rasteryzację przeprowadzono z wykorzystaniem zasięgu bazowego modelu terenu. Tło poza strefą obrywu zostało uzupełnione twardymi zerami, aby nie było nieporządanych wartości NoData i NaN.
+
+**Model terenu powierzchni poślizgu (elevation.tif)**
+
+Geometrię terenu oparto na trzech niezależnych modelach numerycznych pobranych i dociętych do obszaru roboczego: Copernicus COP30, JAXA ALOS (AW3D30) oraz SRTMGL1. Aby uzyskać fizyczną powierzchnię podstawy masy (teren po oderwaniu się lawiny), od oryginalnych modeli odjęto warstwę masy obrywu przy użyciu Kalkulatora rastrów. Operacja ta została powtórzona dla każdego z trzech modeli z osobna, co wygenerowało trzy idealnie spasowane zestawy topografii.
+
+**Rzeczywisty zasięg spływu (reference\_extent.tif)**
+
+W celu dokładnego odwzorowania drogi spływu w dolinie rzeki, wyznaczono poligon zasięgu na podkładzie zdjęć satelitarnych. Pozwoliło to na precyzyjne wyodrębnienie nowego koryta rzeki po przejściu fali. Utworzony poligon został zrasteryzowany z przypisaniem wartości 1 dla koryta oraz 0 dla tła. Zasięg siatki podczas konwersji wymuszono bezpośrednio z pliku elevation, co zapewniło idealne nałożenie się pikseli na siebie.
+
+**Materiał do unoszenia (entrainment\_height.tif)**
+
+Warstwa erodowalnego podłoża została opracowana w oparciu o mapę spadków (Slope) wygenerowaną z modelu Copernicus. W Kalkulatorze rastrów QGIS wprowadzono formułę logiczną zagnieżdżającą przypisane empirycznie miąższości: 3 metry dla nachyleń do 20 stopni (aluwia w dnach dolin), 1.5 metra dla nachyleń 20-35 stopni oraz 0.5 metra dla stromizn powyżej 35 stopni. Wynikowy raster został ograniczony wyłącznie do strefy erozji wyznaczonej poligonem.
+
+**Walidacja krzyżowa**
+
+Ostatnim etapem było sprawdzenie zestawów danych w skrypcie walidacyjnym w Pythonie. Każdy z folderów bazy (Copernicus, ALOS, SRTM) przeszedł testy obejmujące zgodność układu, brak wartości pustych pod i nad obszarem odrywania, wymiary siatki oraz weryfikację obliczonej objętości, osiągając pełną zgodność z narzuconym kontraktem danych.
+
+# MARSON
+
+
 # Dane do kalibracji i parametry referencyjne
 
 Dokument zawiera zbiór wartości weryfikacyjnych i parametrów wejściowych dla modelu spływu gruzowo-lodowego w dolinie Gyirong (Donglin Zangbo), na podstawie dostępnej literatury oraz analizy geomorfologicznej.
