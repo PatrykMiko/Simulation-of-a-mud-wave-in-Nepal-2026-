@@ -67,6 +67,18 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
         default=0.3,
         help="momentum elevation correction scale (0 disables it)",
     )
+    parser.add_argument(
+        "--release-scale",
+        type=float,
+        metavar="F",
+        help="multiply the initial debris thickness by F",
+    )
+    parser.add_argument(
+        "--release-volume",
+        type=float,
+        metavar="M3",
+        help="rescale the initial debris to this volume in m³ (hexagon cell area)",
+    )
 
     return parser.parse_args(argv)
 
@@ -89,6 +101,9 @@ def save_mask(mask: np.ndarray, path: str) -> None:
 
 def main(argv: Iterable[str] | None = None) -> int:
     args = parse_args(argv)
+
+    if args.release_scale is not None and args.release_volume is not None:
+        raise SystemExit("use --release-scale or --release-volume, not both")
 
     if args.headless or args.save or args.summary or args.mask_out:
         import matplotlib
@@ -118,6 +133,15 @@ def main(argv: Iterable[str] | None = None) -> int:
     else:
         params = ModelParameters(alpha_scale=args.alpha_scale)
         model, x, y = make_albano_like(args.n, params=params)
+
+    keep_surface = not args.source
+
+    if args.release_scale is not None:
+        factor = model.scale_release(factor=args.release_scale, keep_surface=keep_surface)
+        print(f"release scaled by {factor:.4g}; volume = {model.total_volume():.4g} m³")
+    elif args.release_volume is not None:
+        factor = model.scale_release(volume=args.release_volume, keep_surface=keep_surface)
+        print(f"release scaled by {factor:.4g}; volume = {model.total_volume():.4g} m³")
 
     if args.summary:
         initial = model.thickness.copy()

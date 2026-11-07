@@ -105,31 +105,11 @@ def sample_to_grid(arr: np.ndarray, src: dict, dst: dict) -> np.ndarray:
     return out
 
 
-def grid_differences(a: dict, b: dict, tol: float = 1e-6) -> list[str]:
-    """Czytelna lista różnic między siatkami a i b (np. model i referencja).
-
-    Pusta lista oznacza identyczne siatki. Opisuje dokładnie te cechy, które porównuje
-    same_grid: rozmiar, rozmiar komórki i położenie lewego dolnego rogu.
-    """
-    diffs = []
-    if a["ncols"] != b["ncols"] or a["nrows"] != b["nrows"]:
-        diffs.append(f"rozmiar (kolumny x wiersze): {a['ncols']}x{a['nrows']} vs {b['ncols']}x{b['nrows']}")
-    same_cell = abs(a["cellsize"] - b["cellsize"]) < tol
-    if not same_cell:
-        diffs.append(f"rozmiar komórki: {a['cellsize']} m vs {b['cellsize']} m")
-    if abs(a["xll"] - b["xll"]) >= tol or abs(a["yll"] - b["yll"]) >= tol:
-        text = f"róg siatki: ({a['xll']}, {a['yll']}) vs ({b['xll']}, {b['yll']})"
-        if same_cell:  # przesunięcie o ułamek komórki (z pominięciem całych komórek)
-            cs = a["cellsize"]
-            dx = (a["xll"] - b["xll"] + cs / 2) % cs - cs / 2
-            dy = (a["yll"] - b["yll"] + cs / 2) % cs - cs / 2
-            text += f"; przesunięcie o ułamek komórki: dx={dx:+.1f} m, dy={dy:+.1f} m"
-        diffs.append(text)
-    return diffs
-
-
 def same_grid(a: dict, b: dict, tol: float = 1e-6) -> bool:
-    return not grid_differences(a, b, tol)
+    return (a["ncols"] == b["ncols"] and a["nrows"] == b["nrows"]
+            and abs(a["cellsize"] - b["cellsize"]) < tol
+            and abs(a["xll"] - b["xll"]) < tol and abs(a["yll"] - b["yll"]) < tol)
+
 
 # ------------------------------------------------------------- maski zasięgu
 def model_extent(hmax: np.ndarray, meta: dict, threshold: float = 0.1) -> np.ndarray:

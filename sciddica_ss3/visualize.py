@@ -85,56 +85,78 @@ def animate(
     save: str | None = None,
     steps: int | None = None,
     progress: bool = True,
+    max_pixels: int = 800,
+    fps: int = 20,
+    dpi: int = 100,
 ) -> object:
-    """Animate terrain, dynamic water mask and debris thickness."""
+    """Animate debris thickness over a static hillshade, drawn as an image."""
+    import shutil
+
     import matplotlib.pyplot as plt
     from matplotlib.animation import FuncAnimation
-    from matplotlib.collections import PolyCollection
-
-    from .geometry import hex_vertices
+    from matplotlib.colors import ListedColormap
 
     if steps_per_frame < 1 or frames < 1 or interval < 1:
         raise ValueError("steps_per_frame, frames and interval must be positive")
 
     if steps is not None and steps >= 0:
-        frames = (steps + steps_per_frame - 1) // steps_per_frame
+        frames = max((steps + steps_per_frame - 1) // steps_per_frame, 1)
 
     p = model.params
-    vertices = hex_vertices(x, y, p.pc)
-    polygons = list(vertices)
+
+    # North is up: plotted northing = -y, as in plot_summary.
+    extent = (
+        float(x.min()) - p.pc, float(x.max()) + p.pc,
+        -float(y.max()) - p.pc, -float(y.min()) + p.pc,
+    )
+    lookup = _hex_lookup(model.altitude.shape, p.pc, (0.0, 0.0), extent, max_pixels)
+    valid = lookup[2]
+
+    # ---- static layers, computed once ------------------------------------
+    shade = _to_image(hillshade(model.altitude + model.thickness, p.pc), lookup)
+    base = np.ma.masked_invalid(0.30 + 0.70 * shade)
+
+    lake = None
+    if model.water_level is not None:
+        in_lake = valid & (_to_image(model.altitude, lookup) < model.water_level)
+        if in_lake.any():
+            lake = np.ma.masked_where(~in_lake, np.ones(valid.shape))
 
     fig, ax = plt.subplots(figsize=(8, 8))
 
-    land = PolyCollection(
-        polygons,
-        array=model.altitude.ravel(),
-        cmap="terrain",
-        edgecolors="none",
-    )
-    ax.add_collection(land)
+    land_cmap = plt.get_cmap("Greys").copy()
+    land_cmap.set_bad((1, 1, 1, 0))
+    ax.imshow(base, extent=extent, origin="upper", cmap=land_cmap,
+              vmin=0, vmax=1, interpolation="nearest", aspect="equal")
 
-    lake = PolyCollection(polygons, edgecolors="none")
-    ax.add_collection(lake)
+    if lake is not None:
+        ax.imshow(lake, extent=extent, origin="upper",
+                  cmap=ListedColormap([(0.55, 0.75, 0.95, 0.6)]),
+                  interpolation="nearest", aspect="equal")
 
+    # ---- dynamic layer ----------------------------------------------------
     cmap = plt.get_cmap("inferno").copy()
     cmap.set_bad((0, 0, 0, 0))
 
-    debris = PolyCollection(polygons, cmap=cmap, edgecolors="none")
+    def debris_image():
+        img = _to_image(model.thickness, lookup, 0.0)
+        return np.ma.masked_less(img, 0.02)
 
-    debris.set_clim(0.0, max(4.0, float(model.thickness.max())))
-    debris.set_array(np.ma.masked_less(model.thickness.ravel(), 0.02))
-
-    ax.add_collection(debris)
-
+    debris = ax.imshow(
+        debris_image(), extent=extent, origin="upper", cmap=cmap,
+        vmin=0.0, vmax=max(4.0, float(model.thickness.max())),
+        interpolation="nearest", aspect="equal",
+    )
     fig.colorbar(debris, ax=ax, shrink=0.7, label="debris thickness [m]")
 
-    ax.set_xlim(x.min() - p.pc, x.max() + p.pc)
-    ax.set_ylim(y.min() - p.pc, y.max() + p.pc)
+    ax.set_xlim(extent[0], extent[1])
+    ax.set_ylim(extent[2], extent[3])
 
-    ax.set_aspect("equal")
-    ax.invert_yaxis()
-
-    title = ax.set_title("t = 0 s")
+    # Inside the axes, so blitting refreshes it.
+    label = ax.text(
+        0.02, 0.97, "t = 0 s", transform=ax.transAxes, va="top", fontsize=10,
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.75, edgecolor="none"),
+    )
 
     pbar = None
     if progress and save:
@@ -145,34 +167,30 @@ def animate(
         except ImportError:
             pass
 
+    def init():
+        return debris, label
+
     def update(_frame: int):
         for _ in range(steps_per_frame):
             model.step()
 
-        land.set_array(model.altitude.ravel())
-
-        water_alpha = model.submerged().ravel().astype(float) * 0.75
-        water_colours = np.zeros((water_alpha.size, 4), dtype=float)
-        water_colours[:, 0] = 0.55
-        water_colours[:, 1] = 0.75
-        water_colours[:, 2] = 0.95
-        water_colours[:, 3] = water_alpha
-
-        lake.set_facecolor([tuple(color) for color in water_colours])
-
-        debris.set_array(np.ma.masked_less(model.thickness.ravel(), 0.02))
-
-        title.set_text(f"t = {model.time:.0f} s   debris volume = {model.total_volume():.0f} m³")
+        debris.set_data(debris_image())
+        label.set_text(f"t = {model.time:.0f} s   debris volume = {model.total_volume():.0f} m³")
 
         if pbar is not None:
             pbar.update(1)
 
-        return land, lake, debris, title
+        return debris, label
 
-    animation = FuncAnimation(fig, update, frames=frames, interval=interval, blit=False)
+    animation = FuncAnimation(
+        fig, update, frames=frames, init_func=init, interval=interval,
+        blit=save is None, cache_frame_data=False,
+    )
 
     if save:
-        animation.save(save, writer="pillow", fps=20)
+        streaming = str(save).lower().endswith((".mp4", ".mkv", ".webm"))
+        writer = "ffmpeg" if streaming and shutil.which("ffmpeg") else "pillow"
+        animation.save(save, writer=writer, fps=fps, dpi=dpi)
         plt.close(fig)
         if pbar is not None:
             pbar.close()
@@ -216,8 +234,49 @@ def _outline(ax, tri, mask, **style):
         ax.tricontour(tri, mask.astype(float).ravel(), levels=[0.5], **style)
 
 
+def _hex_lookup(shape, pc, origin, extent, max_pixels=1100):
+    """For every pixel of a regular north-up image, find the hex cell under it.
+
+    Returns (ri, qi, valid, east, north); ri/qi index arrays shaped like the image.
+    """
+    H, W = shape
+    e0, e1, n0, n1 = extent
+    span_e, span_n = e1 - e0, n1 - n0
+    if span_e >= span_n:
+        ncols, nrows = max_pixels, max(int(max_pixels * span_n / span_e), 2)
+    else:
+        nrows, ncols = max_pixels, max(int(max_pixels * span_e / span_n), 2)
+
+    east = np.linspace(e0, e1, ncols)
+    north = np.linspace(n1, n0, nrows)               # first image row = northernmost
+    X = east[None, :] - origin[0]
+    Y = origin[1] - north[:, None]                   # model y grows with row index
+
+    r_f = Y / (1.5 * pc)
+    q_f = X / (SQRT3 * pc) - 0.5 * r_f
+
+    # cube rounding of the fractional axial coordinates
+    cx, cz = q_f, r_f
+    cy = -cx - cz
+    rx, ry, rz = np.rint(cx), np.rint(cy), np.rint(cz)
+    dx, dy, dz = np.abs(rx - cx), np.abs(ry - cy), np.abs(rz - cz)
+    fix_x = (dx > dy) & (dx > dz)
+    fix_y = ~fix_x & (dy > dz)
+    qi = np.where(fix_x, -ry - rz, rx).astype(np.int64)
+    ri = np.where(~fix_x & ~fix_y, -rx - ry, rz).astype(np.int64)
+
+    valid = (ri >= 0) & (ri < H) & (qi >= 0) & (qi < W)
+    return (np.clip(ri, 0, H - 1), np.clip(qi, 0, W - 1), valid,
+            np.broadcast_to(east, (nrows, ncols)), np.broadcast_to(north[:, None], (nrows, ncols)))
+
+
+def _to_image(field, lookup, fill=np.nan):
+    ri, qi, valid = lookup[0], lookup[1], lookup[2]
+    return np.where(valid, np.asarray(field)[ri, qi], fill)
+
+
 def plot_summary(
-    model: SciddicaSS3,
+    model,
     x,
     y,
     max_thickness,
@@ -228,91 +287,89 @@ def plot_summary(
     origin=(1_489_000.0, 5_205_500.0),
     save: str | None = None,
     dpi: int = 200,
+    max_pixels: int = 1100,
 ):
-    """Two-panel figure: (a) maximum flow height, (b) height of final deposit.
+    """Two-panel summary (a) maximum flow height, (b) final deposit.
 
-    max_thickness      per-cell maximum debris thickness reached during the run
-    initial_thickness  thickness at t=0 (release area)
-    terrain            pre-event surface (altitude + initial thickness), for hillshade
-    observed_*         optional boolean masks; if None, simulated extents
-                       (max_thickness > 0.05 and final deposit > 0.05) are drawn instead
-    origin             (easting, northing) offset so axes look like UTM coordinates
+    Fields are resampled to a regular image of at most `max_pixels` on its long
+    side, so cost and memory do not grow with the number of cells.
     """
     import matplotlib.pyplot as plt
     from matplotlib.cm import ScalarMappable
-    from matplotlib.collections import PolyCollection
     from matplotlib.colors import BoundaryNorm, ListedColormap
     from matplotlib.lines import Line2D
     from matplotlib.ticker import FuncFormatter
-    from matplotlib.tri import Triangulation
-
-    from .geometry import hex_vertices
 
     p = model.params
-    east = origin[0] + x
-    north = origin[1] - y                      # north up: top rows = highest northing
-    verts = hex_vertices(east, north, p.pc)
-    # Delaunay triangulation is translation-invariant, but QHull chokes on
-    # the large UTM coordinates; triangulate centered coordinates then restore.
-    _cx = east.ravel() - east.ravel().mean()
-    _cy = north.ravel() - north.ravel().mean()
-    tri = Triangulation(_cx, _cy)
-    tri.x = east.ravel().copy()
-    tri.y = north.ravel().copy()
+    extent = (
+        origin[0] + float(x.min()) - p.pc, origin[0] + float(x.max()) + p.pc,
+        origin[1] - float(y.max()) - p.pc, origin[1] - float(y.min()) + p.pc,
+    )
+    lookup = _hex_lookup(model.altitude.shape, p.pc, origin, extent, max_pixels)
+    east_img, north_img = lookup[3], lookup[4]
+    valid = lookup[2]
 
-    shade = hillshade(terrain, p.pc)
-    grey = plt.cm.gray(0.30 + 0.70 * shade).reshape(-1, 4)
-    lake_mask = model.submerged().ravel()
+    shade = _to_image(hillshade(terrain, p.pc), lookup)
+    grey = np.ma.masked_invalid(0.30 + 0.70 * shade)
+    if model.water_level is None:
+        lake = np.ma.masked_all(valid.shape)
+    else:
+        in_lake = valid & (_to_image(model.altitude, lookup) < model.water_level)
+        lake = np.ma.masked_where(~in_lake, np.ones(valid.shape))
 
-    final_thickness = model.thickness.copy()
+    final_thickness = model.thickness
     simulated = observed_impact is None
     impact = (max_thickness > 0.05) if observed_impact is None else observed_impact
     deposit = (final_thickness > 0.05) if observed_deposit is None else observed_deposit
     obs_label = "Simulated" if simulated else "Observation"
 
+    release_img = _to_image(np.asarray(initial_thickness) > 0.05, lookup, 0.0).astype(float)
+    impact_img = _to_image(np.asarray(impact), lookup, 0.0).astype(float)
+    deposit_img = _to_image(np.asarray(deposit), lookup, 0.0).astype(float)
+
     fig = plt.figure(figsize=(5.4, 11.0))
     gs = fig.add_gridspec(2, 2, width_ratios=[1.0, 0.045], wspace=0.07, hspace=0.30)
-
     fmt = FuncFormatter(lambda v, _: f"{v:,.0f}".replace(",", " "))
+    land_cmap = plt.get_cmap("Greys").copy()
+    land_cmap.set_bad((1, 1, 1, 0))
+    lake_cmap = ListedColormap([(0.55, 0.75, 0.95, 0.45)])
+
+    def outline(ax, img, **style):
+        if np.nanmin(img) < 0.5 < np.nanmax(img):
+            ax.contour(east_img, north_img, img, levels=[0.5], **style)
 
     def panel(row, field, title, cmap_name, cbar_label):
         ax = fig.add_subplot(gs[row, 0])
         cax = fig.add_subplot(gs[row, 1])
 
-        # hillshaded terrain (+ faint lake)
-        ax.add_collection(PolyCollection(list(verts), facecolors=grey,
-                                         edgecolors="face", linewidths=0.3))
-        if lake_mask.any():
-            ax.add_collection(PolyCollection(
-            list(verts[lake_mask]), facecolors=(0.55, 0.75, 0.95, 0.45),
-                edgecolors="none"))
+        ax.imshow(grey, extent=extent, origin="upper", cmap=land_cmap,
+                  vmin=0, vmax=1, interpolation="nearest", aspect="equal")
+        if np.ma.count(lake):
+            ax.imshow(lake, extent=extent, origin="upper", cmap=lake_cmap,
+                      interpolation="nearest", aspect="equal")
 
-        # binned colour layer
-        levels = _nice_levels(float(field.max()))
+        field_img = _to_image(field, lookup)
+        vmax = float(np.nanmax(field_img)) if np.isfinite(field_img).any() else 0.0
+        levels = _nice_levels(vmax)
         n = len(levels) - 1
         cmap = ListedColormap(plt.get_cmap(cmap_name)(np.linspace(0.25, 0.95, n)))
         cmap.set_bad((0, 0, 0, 0))
         norm = BoundaryNorm(levels, n)
-        values = np.ma.masked_less(np.minimum(field, levels[-1] - 1e-9), levels[0])
-        ax.add_collection(PolyCollection(
-            list(verts), array=values.ravel(), cmap=cmap, norm=norm,
-            edgecolors="face", linewidths=0.3, alpha=0.85))
+        shown = np.ma.masked_less(np.minimum(np.nan_to_num(field_img), levels[-1] - 1e-9), levels[0])
+        ax.imshow(shown, extent=extent, origin="upper", cmap=cmap, norm=norm,
+                  alpha=0.85, interpolation="nearest", aspect="equal")
 
-        # thickness contours
-        contour_levels = [lv for lv in levels[1:] if lv < field.max()]
+        contour_levels = [lv for lv in levels[1:] if lv < vmax]
         if contour_levels:
-            ax.tricontour(tri, field.ravel(), levels=contour_levels,
-                          colors="k", linewidths=0.4, alpha=0.65)
+            ax.contour(east_img, north_img, np.nan_to_num(field_img),
+                       levels=contour_levels, colors="k", linewidths=0.4, alpha=0.65)
 
-        # release area (dotted red), impact area (solid red), deposit (dashed yellow)
-        _outline(ax, tri, initial_thickness > 0.05,
-                 colors="red", linestyles=":", linewidths=1.3)
-        _outline(ax, tri, impact, colors="red", linestyles="-", linewidths=1.2)
-        _outline(ax, tri, deposit, colors="gold", linestyles="--", linewidths=1.4)
+        outline(ax, release_img, colors="red", linestyles=":", linewidths=1.3)
+        outline(ax, impact_img, colors="red", linestyles="-", linewidths=1.2)
+        outline(ax, deposit_img, colors="gold", linestyles="--", linewidths=1.4)
 
-        ax.set_xlim(east.min() - p.pc, east.max() + p.pc)
-        ax.set_ylim(north.min() - p.pc, north.max() + p.pc)
-        ax.set_aspect("equal")
+        ax.set_xlim(extent[0], extent[1])
+        ax.set_ylim(extent[2], extent[3])
         ax.xaxis.set_major_formatter(fmt)
         ax.yaxis.set_major_formatter(fmt)
         ax.tick_params(labelsize=7)
@@ -330,15 +387,11 @@ def plot_summary(
             Line2D([0], [0], color="gold", ls="--", lw=1.4, label=f"{obs_label}: deposit"),
         ]
         ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.07),
-                  ncol=3, frameon=False, fontsize=6.5, handlelength=1.8,
-                  columnspacing=1.0)
-        return ax
+                  ncol=3, frameon=False, fontsize=6.5, handlelength=1.8, columnspacing=1.0)
 
-    panel(0, max_thickness, "(a) Maximum flow height", "YlOrBr",
-          "Flow height [m]")
-    panel(1, final_thickness, "(b) Height of final deposit", "Oranges",
-          "Deposit thickness [m]")
+    panel(0, max_thickness, "(a) Maximum flow height", "YlOrBr", "Flow height [m]")
+    panel(1, final_thickness, "(b) Height of final deposit", "Oranges", "Deposit thickness [m]")
 
     if save:
-        fig.savefig(save, dpi=dpi, bbox_inches="tight")
+        fig.savefig(save, dpi=dpi)        # no bbox_inches="tight": it renders twice
     return fig

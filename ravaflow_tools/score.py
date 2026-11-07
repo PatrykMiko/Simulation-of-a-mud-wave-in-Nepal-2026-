@@ -32,12 +32,9 @@ def score_run(cfg: dict) -> dict:
     ref_path = workdir / cfg["reference_mask"]
     ref, ref_meta = M.read_raster(ref_path)
     if not M.same_grid(meta, ref_meta):
-        diffs = M.grid_differences(meta, ref_meta)
         ref = M.sample_to_grid(ref, ref_meta, meta)  # najbliższy sąsiad na siatkę modelu
-        print("[uwaga] siatki modelu i referencji różnią się (model vs referencja): "
-              + "; ".join(diffs)
-              + ". Referencję próbkuję najbliższym sąsiadem na siatkę modelu; komórki "
-                "poza obszarem rastra referencji są pomijane w ocenie.")
+        print(f"[uwaga] siatka referencji ({ref_meta['cellsize']} m) != siatka modelu "
+              f"({meta['cellsize']} m): referencję próbkuję najbliższym sąsiadem.")
     obs, valid = M.reference_masks(ref, {**meta, "nodata": ref_meta["nodata"]})
     model = M.model_extent(hmax, meta, threshold)
 

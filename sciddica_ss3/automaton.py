@@ -123,7 +123,7 @@ class SciddicaSS3:
         )
 
     def total_energy(self) -> float:
-        """Reconstruct total debris energy using the paper's Eq. (1)."""
+        """Reconstruct total debris energy."""
         cell_energy = (
             self.thickness * (0.5 * self.thickness + self.altitude + self.kinetic_head)
         )
@@ -347,6 +347,42 @@ class SciddicaSS3:
             incoming_bx_mass,
             incoming_by_mass,
         )
+    
+
+    def scale_release(
+        self,
+        factor: float | None = None,
+        volume: float | None = None,
+        keep_surface: bool = True,
+    ) -> float:
+        """Scale the initial debris thickness by `factor`, or to a target `volume` [m³].
+
+        keep_surface=True keeps altitude + thickness unchanged (the release was cut
+        out of the terrain, as in make_albano_like). Use False when the release sits
+        on top of the terrain (converted Ravaflow data). Returns the factor applied.
+        Must be called before the first step.
+        """
+        if self.steps_completed:
+            raise RuntimeError("scale_release must be called before the first step")
+        if (factor is None) == (volume is None):
+            raise ValueError("give exactly one of factor or volume")
+
+        current = self.total_volume()
+        if volume is not None:
+            if current <= 0:
+                raise ValueError("no release thickness to scale")
+            factor = volume / current
+        assert factor is not None
+        if not np.isfinite(factor) or factor < 0:
+            raise ValueError("scale factor must be finite and non-negative")
+
+        old = self.state.thickness
+        new = (old * factor).astype(self._dtype)
+        if keep_surface:
+            self.state.altitude = (self.state.altitude + old - new).astype(self._dtype)
+        self.state.thickness = new
+        return float(factor)
+    
 
     def step(self) -> None:
         """Advance one step, computing only on a window around the debris."""

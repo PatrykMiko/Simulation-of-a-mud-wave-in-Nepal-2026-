@@ -1,6 +1,6 @@
 # Jak zainstalować i uruchomić model (krok po kroku)
 
-Wszystkie polecenia
+Instrukcja jest napisana tak, żeby dało się wszystko zrobić bez niczyjej pomocy. Wszystkie polecenia
 sprawdzono na Ubuntu 24.04 z GRASS GIS 8.3.2 i r.avaflow 4.0G Revision 7. Polecenia wpisujesz w zwykłym
 terminalu, chyba że napisano inaczej.
 
@@ -77,7 +77,7 @@ Lista z `g.extension -a` powinna zawierać `r.avaflow.40G`, `r.avaflow.main`, `r
 python -m pytest -q
 ```
 
-Powinno przejść 13 testów (metryki, walidator, generator, scenariusze, parser wyników). Nie wymagają GRASS-a.
+Powinno przejść 11 testów (metryki, walidator, generator, scenariusze, parser wyników). Nie wymagają GRASS-a.
 
 ## 3. Pierwszy przebieg: przykład Cascadia (test całego łańcucha)
 
@@ -143,7 +143,6 @@ python -m ravaflow_tools.check_inputs data/synthetic --volume 2e6 --cellsize 30 
 python -m ravaflow_tools.runner configs/synthetic_test.yaml
 python -m ravaflow_tools.score  configs/synthetic_test.yaml
 ```
-Oczekiwany wynik (nasz laptop): runner wypisze czas modelu ok. 470 s i CSI r.avaflow 0,525; score wypisze Jaccard 0,535 oraz komunikat [uwaga] o różnicy siatek (r.avaflow zwraca siatkę 201×301, o jedną kolumnę i wiersz większą niż dane wejściowe, i przesuniętą o 5 m). To oczekiwane zachowanie, nie błąd.
 
 Zasięg „rzeczywisty” w danych syntetycznych jest wymyślony, więc Jaccard z tego przebiegu **nic nie mówi o jakości
 modelu**; test sprawdza tylko, że cały łańcuch przechodzi na danych w tym formacie.
@@ -167,8 +166,19 @@ faz). Po uruchomieniu powstaje `scenarios_summary.csv` (Jaccard, czas itd. dla k
 scenariusze są eksploracyjne: parametry pochodzą z kalibracji na zdarzeniu bazowym, więc wyniki porównujemy
 głównie między modelami i względem bazy.
 
+## 8. Ważne zasady i pułapki
 
-## 8. Typowe problemy
+- **Jeden mapset GRASS to jeden przebieg naraz.** Przebiegi uruchamiaj po kolei. Równoległe wymagają osobnych
+  lokalizacji (jeszcze nie zaimplementowane).
+- **Nie naciskaj `Ctrl+Z` podczas przebiegu** (zatrzymuje proces, który potem blokuje mapset). Do przerwania służy
+  `Ctrl+C`.
+- Rysowanie wykresów przez r.avaflow zajmuje ponad połowę czasu przebiegu. Do pomiaru kosztu obliczeń używaj
+  czasu modelu (`*_time.txt`, pole `model_seconds`), nie czasu całkowitego.
+- Czas mierz zawsze na tym samym sprzęcie i zapisuj liczbę rdzeni (wymóg porównania kosztów w RQ5).
+- Raster `elevation` to powierzchnia **podstawy** masy, a nie teren sprzed zdarzenia (zob. `data/README.md`).
+- Rastry `release_height` poza obszarem odrywania mają mieć dokładnie 0, nie wartość brakującą.
+
+## 9. Typowe problemy
 
 | Objaw | Przyczyna i rozwiązanie |
 |---|---|
@@ -177,6 +187,5 @@ głównie między modelami i względem bazy.
 | `runner` nic nie wypisuje przez kilka minut | to normalne, przebieg trwa; wypisuje się dopiero po zakończeniu (log na bieżąco w `*.run.log`) |
 | `top` pokazuje stan `T` procesu `grass` | proces zatrzymany; `pkill -9 -P <PID>; kill -9 <PID>`, potem usuń `.gislock` |
 | `ERROR: wxGUI requires wxPython` | nieszkodliwe, GUI nie jest potrzebne |
-| `[uwaga] siatki modelu i referencji różnią się (model vs referencja): ...` | informacja, nie błąd; komunikat wylicza, co się różni (rozmiar, rozmiar komórki, róg siatki z przesunięciem o ułamek komórki). Referencja jest próbkowana najbliższym sąsiadem na siatkę modelu, komórki poza jej zasięgiem są pomijane |
-| przebieg „zawisł" po Ctrl+Z | Ctrl+Z tylko wstrzymuje proces. `jobs`, `kill %N`, potem `pgrep -a grass` i ewentualnie usuń `.gislock`. Długie przebiegi uruchamiaj tak: `nohup python -m ... > plik.log 2>&1 &` i `tail -f plik.log` |
+| `[uwaga] siatka referencji (5.0 m) != siatka modelu (20.0 m)` | informacja, nie błąd; referencja jest przepróbowana najbliższym sąsiadem |
 | wykresy się nie generują | sprawdź pakiety R (krok 1b) |

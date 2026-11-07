@@ -10,6 +10,7 @@ licencje. Do repozytorium trafia tylko ten plik.
 | `data/cascadia/` | przykład szkoleniowy r.avaflow 4.0G (dane i skrypt startowy) | `https://www.landslidemodels.org/r.avaflow/data/Cascadia_r.avaflow40G.zip` |
 | `data/synthetic/` | dane syntetyczne w formacie kontraktu danych | `python -m ravaflow_tools.synthetic data/synthetic` |
 | `data/nepal/` | **prawdziwe dane (Langtang 2026)**, dostarczane przez osoby od danych | do uzupełnienia |
+| `data/calibration/` | Punkty kontrolne, infrastruktura (mosty), zdjęcia satelitarne oraz referencyjne dane fizyczne do kalibracji modelu | OSM, opracowanie własne na podstawie literatury
 
 ## Kontrakt danych dla `data/nepal/`
 
@@ -33,5 +34,4 @@ python -m ravaflow_tools.check_inputs data/nepal --volume 200e6 --cellsize 30 --
 
 Skrypt wypisuje listę błędów i ostrzeżeń; kod wyjścia 1 oznacza, że dane nie spełniają kontraktu.
 `--volume` to objętość, którą założyliście przy tworzeniu `release_height.tif` (w m³).
-
 
