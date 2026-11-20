@@ -1,0 +1,21 @@
+{
+  "version": "v2",
+  "dem": "alos",
+  "raw_file": "C:\\Users\\huber\\Downloads\\cale_dane_nepal\\rasters_AW3D30\\output_AW3D30.tif",
+  "created": "2026-11-18T10:14:39",
+  "target_volume_m3": 140000000.0,
+  "actual_volume_m3": 140000047.80846164,
+  "release_mode": "hybrid",
+  "base_m": 44.0,
+  "base_volume_m3": 69933600.0,
+  "pool_volume_m3": 70066400.0,
+  "dry_source_cells": 0,
+  "z_level_m": 3072.066496009822,
+  "h_max_m": 273.5313415527344,
+  "source_cells": 1766,
+  "source_polygon_sha256": "2d8e50692e086fa06cf35f999fe73bbb266f1ee73aade52c53b232c57b002527",
+  "source_file": "data\\nepal\\source\\source_v1.gpkg",
+  "cell_m": 30.0,
+  "epsg": 32645,
+  "domain": "gotowa warstwa 'bufor_rzeki'"
+}

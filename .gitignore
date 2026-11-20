@@ -32,3 +32,9 @@ simulation_of_a_mud_wave_in_nepal_2026.egg-info/PKG-INFO
 simulation_of_a_mud_wave_in_nepal_2026.egg-info/requires.txt
 simulation_of_a_mud_wave_in_nepal_2026.egg-info/SOURCES.txt
 simulation_of_a_mud_wave_in_nepal_2026.egg-info/top_level.txt
+
+
+*.gpkg-shm
+*.gpkg-wal
+
+*.aux.xml
