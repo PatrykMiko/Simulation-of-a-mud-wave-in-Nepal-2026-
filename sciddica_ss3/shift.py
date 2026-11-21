@@ -4,7 +4,17 @@
 from __future__ import annotations
 
 import numpy as np
-from numba import njit, prange
+try:
+    from numba import njit, prange
+except Exception:  # pragma: no cover
+    njit = None
+    prange = range
+
+def _maybe_njit(*args, **kwargs):
+    if njit is None:
+        def deco(fn): return fn
+        return deco
+    return njit(*args, **kwargs)
 
 from .constants import EPS, GRAVITY, DIRECTION_X, DIRECTION_Y
 from .state import ModelParameters, ShiftResult
@@ -69,7 +79,7 @@ def _circle_segment(
     return fraction, external_centroid, internal_centroid
 
 
-@njit(cache=True)
+@_maybe_njit(cache=True)
 def _circle_segment_scalar(z, r, eps):
     zc = min(max(z, -r), r)
     rad = max(r * r - zc * zc, 0.0)
@@ -88,7 +98,7 @@ def _circle_segment_scalar(z, r, eps):
     return frac, ec, ic
 
 
-@njit(cache=True, parallel=True, error_model="numpy")
+@_maybe_njit(cache=True, parallel=False, error_model="numpy")
 def _shift_kernel(
     kh_in, src, nb, bx, by, fc, sub, active,
     spacing, dt, g, g_sub, wr, ux, uy, eps,

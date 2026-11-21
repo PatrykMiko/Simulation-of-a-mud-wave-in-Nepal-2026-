@@ -1,0 +1,7 @@
+/home/szymon/Documents/AGH/Semestr_V/SSD/build/CMakeFiles/sciddica_ss3_cpp.dir
+/home/szymon/Documents/AGH/Semestr_V/SSD/build/CMakeFiles/edit_cache.dir
+/home/szymon/Documents/AGH/Semestr_V/SSD/build/CMakeFiles/rebuild_cache.dir
+/home/szymon/Documents/AGH/Semestr_V/SSD/build/CMakeFiles/list_install_components.dir
+/home/szymon/Documents/AGH/Semestr_V/SSD/build/CMakeFiles/install.dir
+/home/szymon/Documents/AGH/Semestr_V/SSD/build/CMakeFiles/install/local.dir
+/home/szymon/Documents/AGH/Semestr_V/SSD/build/CMakeFiles/install/strip.dir

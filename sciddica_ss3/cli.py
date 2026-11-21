@@ -79,6 +79,26 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
         metavar="M3",
         help="rescale the initial debris to this volume in m³ (hexagon cell area)",
     )
+    parser.add_argument(
+        "--observed-impact",
+        metavar="FILE",
+        help="actual impact area mask (.npy/.tif/.npz) to compare against the simulated impact",
+    )
+    parser.add_argument(
+        "--impact-threshold",
+        type=float,
+        default=0.05,
+        help="debris thickness above which a cell counts as impacted (default: 0.05)",
+    )
+    parser.add_argument("--use-float32", action="store_true", help="use float32 compute dtype")
+    parser.add_argument("--use-numba", action="store_true", help="use numba kernels when available")
+    parser.add_argument("--use-cpp", action="store_true", help="use C++ kernels when available")
+    parser.add_argument("--trials", type=int, default=20, help="number of optuna trials")
+    parser.add_argument("--n-jobs", type=int, default=1, help="number of parallel Optuna workers")
+    parser.add_argument("--data-dir", help="override converted scene directory")
+    parser.add_argument("--optimize", action="store_true", help="run optuna optimization instead of simulation")
+    parser.add_argument("--optimize-steps", type=int, default=None, help="steps per trial (default: run to stability)")
+    parser.add_argument("--check-every", type=int, default=100, help="interval (steps) for early-stopping check and logging (default: 100)")
 
     return parser.parse_args(argv)
 
@@ -128,13 +148,24 @@ def main(argv: Iterable[str] | None = None) -> int:
             data["soil_depth"],
             params,
             water_level=meta.get("water_level"),
+            use_float32=args.use_float32,
+            use_numba=args.use_numba,
+            use_cpp=args.use_cpp,
         )
         x, y = cell_centres(model.height, model.width, side)
     else:
         params = ModelParameters(alpha_scale=args.alpha_scale)
-        model, x, y = make_albano_like(args.n, params=params)
+        model, x, y = make_albano_like(args.n, params=params, use_float32=args.use_float32, use_numba=args.use_numba, use_cpp=args.use_cpp)
 
-    keep_surface = not args.source
+    if args.optimize:
+        import logging
+        if not logging.getLogger().handlers:
+            logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+        from .optimize import load_nepal_scene, optimize_nepal
+        root = args.source or "data/nepal"
+        study = optimize_nepal(root, data_dir=args.data_dir, steps=args.optimize_steps, n_trials=args.trials, n_jobs=args.n_jobs, use_float32=args.use_float32, use_numba=args.use_numba, use_cpp=args.use_cpp, check_every=args.check_every)
+        print("best:", study.best_params, study.best_value)
+        return 0
 
     if args.release_scale is not None:
         factor = model.scale_release(factor=args.release_scale, keep_surface=keep_surface)

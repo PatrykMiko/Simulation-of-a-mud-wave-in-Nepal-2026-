@@ -5,11 +5,23 @@ from __future__ import annotations
 
 import numpy as np
 
-from .constants import EPS, GRAVITY, MIN_THICKNESS, DIRECTION_X, DIRECTION_Y, NEIGHBOUR_OFFSETS
+from .constants import GRAVITY, MIN_THICKNESS, DIRECTION_X, DIRECTION_Y, NEIGHBOUR_OFFSETS
+from .dtypes import compute_eps, resolve_cpp_flag, resolve_numba_flag
 from .geometry import neighbour_stack, shifted
 from .flow import minimization_algorithm, momentum_elevation_correction
 from .shift import _shift_fraction, _external_flow_after_water_loss, _internal_barycentre, _medium_arrays
 from .state import FlowState, ModelParameters, OutflowPhase
+
+try:  # optional C++ backend
+    from sciddica_ss3_cpp import step_full as _cpp_step_full
+    from sciddica_ss3_cpp import record_impact as _cpp_record_impact
+except Exception:  # pragma: no cover - C++ backend unavailable
+    _cpp_step_full = None
+    _cpp_record_impact = None
+
+# Debris thickness above which a cell counts as impacted. Matches the impact
+# threshold used by the visualization (`max_thickness > 0.05`).
+IMPACT_THRESHOLD = 0.05
 
 
 class SciddicaSS3:
@@ -23,10 +35,43 @@ class SciddicaSS3:
         params: ModelParameters | None = None,
         water_level: float | None = None,
         use_float32: bool = False,
+        use_numba: bool | None = None,
+        use_cpp: bool | None = None,
     ) -> None:
         self.params = params or ModelParameters()
         self.use_float32 = bool(use_float32)
+        self.use_numba = resolve_numba_flag(use_numba)
+        self.use_cpp = resolve_cpp_flag(use_cpp)
         self._dtype = np.float32 if self.use_float32 else float
+        self._eps = compute_eps(self._dtype)
+
+        p = self.params
+        # C++ backend parameters (mirrors ModelParameters / MediumParameters).
+        self._cpp_pc = float(p.pc)
+        self._cpp_pt = float(p.pt)
+        self._cpp_rho = float(p.rho)
+        self._cpp_alpha_scale = float(p.alpha_scale)
+        self._cpp_pml = float(p.pml)
+        self._cpp_pwr = float(p.pwr)
+        self._cpp_rho_water = float(p.rho_water)
+        self._cpp_adh_air = float(p.air.adh)
+        self._cpp_pf_air = float(p.air.pf)
+        self._cpp_pmt_air = float(p.air.pmt)
+        self._cpp_per_air = float(p.air.per)
+        self._cpp_ptd_air = float(p.air.ptd)
+        self._cpp_ped_air = float(p.air.ped)
+        self._cpp_shift_friction_air = float(p.air.shift_friction)
+        self._cpp_adh_w = float(p.water.adh)
+        self._cpp_pf_w = float(p.water.pf)
+        self._cpp_pmt_w = float(p.water.pmt)
+        self._cpp_per_w = float(p.water.per)
+        self._cpp_ptd_w = float(p.water.ptd)
+        self._cpp_ped_w = float(p.water.ped)
+        self._cpp_shift_friction_w = float(p.water.shift_friction)
+        self._cpp_impact_threshold = float(IMPACT_THRESHOLD)
+
+        # Pre-build the (6, H, W) inside mask as unsigned char for the C++ backend.
+        self._inside_uc: np.ndarray | None = None
 
         if water_level is not None and not np.isfinite(water_level):
             raise ValueError("water_level must be finite or None")
@@ -70,6 +115,8 @@ class SciddicaSS3:
         self.steps_completed = 0
 
         self._inside = neighbour_stack(np.ones_like(a), fill_value=0.0) > 0.5
+        self._inside_uc = self._inside.astype(np.uint8)
+        self._max_impact_mask = np.zeros((self.height, self.width), dtype=bool)
         # Pre-allocate reusable arrays to reduce allocations
         self._zeros_hw = np.zeros((self.height, self.width), dtype=self._dtype)
         self._zeros_6hw = np.zeros((6, self.height, self.width), dtype=self._dtype)
@@ -152,9 +199,9 @@ class SciddicaSS3:
         above_threshold = np.maximum(st.kinetic_head - pmt, 0.0)
 
         erosion = np.minimum(per * above_threshold, st.soil_depth)
-        erosion = np.where(old_thickness > EPS, erosion, 0.0)
+        erosion = np.where(old_thickness > self._eps, erosion, 0.0)
         erosion = np.maximum(erosion, 0.0)
-        active_erosion = erosion > EPS
+        active_erosion = erosion > self._eps
 
         head_after_erosion_loss = np.maximum(st.kinetic_head - ped * above_threshold, 0.0)
 
@@ -162,7 +209,7 @@ class SciddicaSS3:
             old_thickness,
             old_thickness + erosion,
             out=np.ones_like(old_thickness),
-            where=(old_thickness + erosion) > EPS,
+            where=(old_thickness + erosion) > self._eps,
         )
 
         new_head = np.where(
@@ -175,7 +222,7 @@ class SciddicaSS3:
             old_thickness + erosion,
             old_thickness,
             out=np.ones_like(old_thickness),
-            where=old_thickness > EPS,
+            where=old_thickness > self._eps,
         )
 
         velocity_scale = np.sqrt(
@@ -183,7 +230,7 @@ class SciddicaSS3:
                 new_head,
                 st.kinetic_head,
                 out=np.ones_like(new_head),
-                where=st.kinetic_head > EPS,
+                where=st.kinetic_head > self._eps,
             )
         )
 
@@ -257,7 +304,7 @@ class SciddicaSS3:
         ) = _medium_arrays(submerged, self.params)
 
         external_head = shifted_result.kinetic_head * (1.0 - ptd)[None, :, :]
-        external_head = np.where(external > EPS, external_head, 0.0)
+        external_head = np.where(external > self._eps, external_head, 0.0)
 
         internal = np.maximum(requested - external, 0.0)
 
@@ -316,7 +363,7 @@ class SciddicaSS3:
                 head_mass_k,
                 mass_k,
                 out=np.zeros_like(mass_k),
-                where=mass_k > EPS,
+                where=mass_k > self._eps,
             )
 
             speed_k = np.sqrt(2.0 * GRAVITY * mean_head)
@@ -384,6 +431,17 @@ class SciddicaSS3:
         return float(factor)
     
 
+    def _record_impact(self) -> None:
+        """Extend the maximum impact mask with the currently impacted cells."""
+        if self.use_cpp and _cpp_record_impact is not None:
+            _cpp_record_impact(
+                self.state.thickness,
+                self._max_impact_mask,
+                IMPACT_THRESHOLD,
+            )
+            return
+        np.logical_or(self._max_impact_mask, self.thickness > IMPACT_THRESHOLD, out=self._max_impact_mask)
+
     def step(self) -> None:
         """Advance one step, computing only on a window around the debris."""
         full_state = self.state
@@ -414,6 +472,7 @@ class SciddicaSS3:
             **{name: value[window].copy() for name, value in vars(full_state).items()}
         )
         self._inside = full_inside[:, window[0], window[1]]
+        self._inside_uc = self._inside.astype(np.uint8)
 
         try:
             self._step_full()
@@ -422,11 +481,56 @@ class SciddicaSS3:
         finally:
             self.state = full_state
             self._inside = full_inside
+            self._inside_uc = self._inside.astype(np.uint8)
+
+        self._record_impact()
 
     def _step_full(self) -> None:
         """Advance the grid by one synchronous cellular-automaton step."""
         st = self.state
         p = self.params
+
+        if self.use_cpp and _cpp_step_full is not None:
+            water_level = 0.0 if self.water_level is None else float(self.water_level)
+            mass_lost = _cpp_step_full(
+                st.altitude,
+                st.thickness,
+                st.soil_depth,
+                st.kinetic_head,
+                st.momentum_x,
+                st.momentum_y,
+                st.barycentre_x,
+                st.barycentre_y,
+                self._inside_uc,
+                self._cpp_pc,
+                self._cpp_pt,
+                self._cpp_rho,
+                self._cpp_alpha_scale,
+                self._cpp_pml,
+                self._cpp_pwr,
+                self._cpp_adh_air,
+                self._cpp_pf_air,
+                self._cpp_pmt_air,
+                self._cpp_per_air,
+                self._cpp_ptd_air,
+                self._cpp_ped_air,
+                self._cpp_shift_friction_air,
+                self._cpp_adh_w,
+                self._cpp_pf_w,
+                self._cpp_pmt_w,
+                self._cpp_per_w,
+                self._cpp_ptd_w,
+                self._cpp_ped_w,
+                self._cpp_shift_friction_w,
+                self._cpp_rho_water,
+                water_level,
+                1 if self.water_level is not None else 0,
+            )
+            self.mass_lost += float(mass_lost)
+            self.time += p.pt
+            self.steps_completed += 1
+            self._assert_finite_state()
+            return
 
         submerged, adh, pf, ptd, friction = self._mobilize_soil()
 
@@ -592,7 +696,7 @@ class SciddicaSS3:
             retained * retained_head + incoming_head_mass,
             new_thickness,
             out=np.zeros_like(new_thickness),
-            where=new_thickness > EPS,
+            where=new_thickness > self._eps,
         )
         new_head = np.maximum(new_head, 0.0)
 
@@ -616,13 +720,13 @@ class SciddicaSS3:
             bary_x_sum,
             new_thickness,
             out=np.zeros_like(new_thickness),
-            where=new_thickness > EPS,
+            where=new_thickness > self._eps,
         )
         new_by = np.divide(
             bary_y_sum,
             new_thickness,
             out=np.zeros_like(new_thickness),
-            where=new_thickness > EPS,
+            where=new_thickness > self._eps,
         )
 
         lost_depth = (phase1.external - phase1.received).sum() + (phase2.external - phase2.received).sum()
@@ -663,7 +767,7 @@ class SciddicaSS3:
             energy_proxy,
             mass_after,
             out=np.maximum(kinetic_head, 0.0).copy(),
-            where=mass_after > EPS,
+            where=mass_after > self._eps,
         )
 
         if apply_turbulence:
@@ -690,7 +794,7 @@ class SciddicaSS3:
             stationary,
             mass_before,
             out=np.zeros_like(stationary),
-            where=mass_before > EPS,
+            where=mass_before > self._eps,
         )
 
         if keep_stationary:
@@ -715,7 +819,7 @@ class SciddicaSS3:
 
             # Do not create directional momentum when the cylinder
             # did not actually shift in this direction.
-            moved = phase.travelled[direction] > EPS
+            moved = phase.travelled[direction] > self._eps
             internal_momentum = np.where(
                 moved,
                 internal_momentum,
@@ -756,5 +860,5 @@ class SciddicaSS3:
             if not np.all(np.isfinite(value)):
                 raise FloatingPointError(f"Non-finite values in state substate {name}")
 
-        if np.any(self.state.thickness < -EPS) or np.any(self.state.soil_depth < -EPS):
+        if np.any(self.state.thickness < -self._eps) or np.any(self.state.soil_depth < -self._eps):
             raise FloatingPointError("Negative thickness or soil depth detected")

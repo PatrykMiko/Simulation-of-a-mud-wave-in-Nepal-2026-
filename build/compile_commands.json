@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/home/szymon/Documents/AGH/Semestr_V/SSD/build",
+  "command": "/usr/bin/g++ -Dsciddica_ss3_cpp_EXPORTS -I/home/szymon/Documents/AGH/Semestr_V/SSD/cpp -isystem /usr/include/python3.13 -g -std=gnu++17 -fPIC -fvisibility=hidden -O3 -march=native -funroll-loops -fopenmp -o CMakeFiles/sciddica_ss3_cpp.dir/cpp/sciddica_ss3_cpp/module.cpp.o -c /home/szymon/Documents/AGH/Semestr_V/SSD/cpp/sciddica_ss3_cpp/module.cpp",
+  "file": "/home/szymon/Documents/AGH/Semestr_V/SSD/cpp/sciddica_ss3_cpp/module.cpp",
+  "output": "CMakeFiles/sciddica_ss3_cpp.dir/cpp/sciddica_ss3_cpp/module.cpp.o"
+}
+]

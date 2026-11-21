@@ -65,8 +65,11 @@ def test_momentum_correction_shape():
     th = np.ones((3, 3))
     px = np.ones((3, 3))
     py = np.zeros((3, 3))
+    kh = np.zeros((3, 3))
+    bx = np.zeros((3, 3))
+    by = np.zeros((3, 3))
     p = ModelParameters()
-    corr = momentum_elevation_correction(th, px, py, p)
+    corr = momentum_elevation_correction(th, px, py, kh, bx, by, p)
     assert corr.shape == (6, 3, 3)
 
 

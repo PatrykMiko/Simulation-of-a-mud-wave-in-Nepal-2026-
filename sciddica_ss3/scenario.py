@@ -14,6 +14,9 @@ from .constants import SQRT3
 def make_albano_like(
     n: int = 80,
     params: ModelParameters | None = None,
+    use_float32: bool = False,
+    use_numba: bool | None = None,
+    use_cpp: bool | None = None,
 ) -> tuple[SciddicaSS3, np.ndarray, np.ndarray]:
     """Create a synthetic channel and lake."""
     if n < 3:
@@ -58,6 +61,9 @@ def make_albano_like(
         soil,
         p,
         water_level=water_level,
+        use_float32=use_float32,
+        use_numba=use_numba,
+        use_cpp=use_cpp,
     )
 
     return model, x, y

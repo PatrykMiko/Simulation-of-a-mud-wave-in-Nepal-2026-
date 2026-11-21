@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -O3 -DNDEBUG -flto=auto -Wl,--dependency-file=CMakeFiles/sciddica_ss3_cpp.dir/link.d -shared  -o sciddica_ss3_cpp.cpython-315-x86_64-linux-gnu.so CMakeFiles/sciddica_ss3_cpp.dir/cpp/sciddica_ss3_cpp/module.cpp.o  /usr/lib/gcc/x86_64-linux-gnu/14/libgomp.so /usr/lib/x86_64-linux-gnu/libpthread.a
