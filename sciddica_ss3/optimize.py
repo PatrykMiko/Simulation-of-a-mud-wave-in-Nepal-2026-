@@ -198,6 +198,7 @@ def run_model(
     use_float32: bool = False,
     use_numba: bool | None = None,
     use_cpp: bool | None = None,
+    trial_number: int | None = None,
 ) -> SciddicaSS3:
     from .dtypes import compute_dtype
     dtype = compute_dtype(use_float32)
@@ -233,8 +234,10 @@ def run_model(
             current_iou = jaccard_fitness(scene.reference, current_mask)
 
             if log_every and step % log_every == 0:
+                prefix = f"trial={trial_number} " if trial_number is not None else ""
                 logger.info(
-                    "step=%d mass=%.6f mass_change=%.3e extent_change=%.3e iou=%.6f active_cells=%d",
+                    "%sstep=%d mass=%.6f mass_change=%.3e extent_change=%.3e iou=%.6f active_cells=%d",
+                    prefix,
                     step,
                     current_mass,
                     mass_change,
@@ -322,7 +325,7 @@ def make_objective(scene: NepalScene, steps: int | None = None, stable_tolerance
     def objective(trial: optuna.Trial) -> float:
         params = params_from_trial(trial, pc=scene.pc)
         try:
-            model = run_model(scene, params, steps, stable_tolerance=stable_tolerance, use_float32=use_float32, use_numba=use_numba, use_cpp=use_cpp, check_every=check_every)
+            model = run_model(scene, params, steps, stable_tolerance=stable_tolerance, use_float32=use_float32, use_numba=use_numba, use_cpp=use_cpp, check_every=check_every, trial_number=trial.number)
             simulated = model.thickness > MIN_THICKNESS
             iou = jaccard_fitness(scene.reference, simulated)
             trial.set_user_attr("iou", iou)
