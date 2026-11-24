@@ -6,3 +6,4 @@ rasterio
 imageio
 pytest
 tqdm
+optuna>=4,<6

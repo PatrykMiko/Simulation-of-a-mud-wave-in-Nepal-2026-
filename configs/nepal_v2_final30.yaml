@@ -1,0 +1,22 @@
+# One explicitly selected final; no Optuna and no 0.35 gate.
+study_dir: calibration_runs/nepal_v2_final30_best5
+source_report: calibration_runs/nepal_v2_gradual8/trials/t0005/report.json
+source_report_sha256: 0d792f4693b27459765488cf93ab2cbe1fe058896362dc4d88e333046ba3e9c1
+source_iou: 0.17279147360850752
+fixed_params:
+  phi: 35.0
+  delta: 8.191596764290402
+  solid_fraction: 0.6373316047825536
+  manning: 0.030336941938605
+  entrainment_log10: -8.491546964543023
+  release_duration_s: 200.606630818372
+duration_s: 7200
+final_threads: 1
+release_mode: extrusion
+release_start_s: 0.0
+final_min_free_gib: 4
+emergency_reserve_gib: 2
+checkpoint_floor_gib: 8
+disk_margin_gib: 1
+resume_margin_gib: 0.5
+poll_seconds: 2

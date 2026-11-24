@@ -1,0 +1,46 @@
+# Nepal v2: stage from the temporary blockage, NOT the initial rock/ice avalanche.
+# Separate study directory required after changing physics, data, scoring or code.
+data_dir: data/nepal/derived/v2
+dem: copernicus
+study_dir: calibration_runs/nepal_v2_current
+volume_m3: 140000000
+coarse_factor: 4                 # 120 m, same domain and conserved source volume
+refine_factor: 2                 # top candidates re-evaluated at 60 m
+refine_top_k: 3
+auto_final: true               # after successful calibration/refinement, run native 30 m automatically
+compare_dems: true             # best parameters also checked on ALOS/SRTM at 60 m
+n_trials: 24                    # TOTAL successful trials, including baseline; resume doesn't reset
+startup_trials: 8
+seed: 42
+max_hours: null                 # whole pipeline by default; optional hours budget checked between coarse trials
+timeout_seconds: 14400          # hard timeout per coarse/refinement run
+final_timeout_seconds: null
+final_min_free_gib: 10
+keep_trial_rasters: false       # keep compressed hmax, metrics, logs, configuration and summaries
+# Same simulated duration for optimization/refinement/final; extend in a NEW study
+# if the observed downstream reach or time series is still developing at the end.
+duration_s: 7200
+output_interval_s: 600
+threshold_m: 0.1                # fixed project protocol; 0.5 and 1 m also reported
+holdout_fraction: 0.25          # western downstream quarter of observed cells, by x coordinate
+entrained_solid_fraction: 0.65  # scenario assumption, not a measured ice fraction
+# Coordinates copied from punkty_kontrolne.gpkg, EPSG:32645. The file has no measured values/names.
+control_points:
+  - {id: fid3, x: 340923.538839214, y: 3129063.230580393}
+  - {id: fid4, x: 350982.885462593, y: 3135221.753097315}
+  - {id: fid5, x: 353665.133118475, y: 3131143.765710997}
+benchmark: [[4, 300], [2, 60], [1, 10]]
+baseline:
+  phi: 35.0
+  delta: 10.0
+  solid_fraction: 0.60
+  manning: 0.035
+  entrainment_log10: -7.0
+# Exploration ranges, NOT calibrated values. Solid grain density is fixed at 2700 kg/m3.
+# Water fraction here describes the already mixed mass at the blockage, not the initial 10-15% ice.
+search:
+  phi: {low: 30.0, high: 38.0}
+  delta: {low: 3.0, high: 20.0}
+  solid_fraction: {low: 0.35, high: 0.80}
+  manning: {low: 0.015, high: 0.060, log: true}
+  entrainment_log10: {low: -8.5, high: -5.5}

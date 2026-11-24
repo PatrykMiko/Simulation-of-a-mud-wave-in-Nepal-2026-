@@ -1,5 +1,7 @@
 # Symulacja fali błotnej w Nepalu (2026): SCIDDICA-SS3 vs r.avaflow v4
 
+**Eksperyment 30 m na komputerze kolegi.** Instalacja, kontrola zasobów i start w [SYMULACJA.md](SYMULACJA.md). Parametry 20 prób, regułę zakończenia i ranking według IoU całości opisuje [OPIS.md](OPIS.md).
+
 Projekt na przedmiot *Symulacja systemów dyskretnych*. Odtwarzamy numerycznie zdarzenie z 26 sierpnia 2026
 (zawalenie skał i lodowca w Parku Narodowym Langtang, spływ gruzowy i powódź wzdłuż rzek Lende Khola i
 Trishuli) dwoma modelami o skrajnie różnej złożoności: automatem komórkowym **SCIDDICA-SS3** i wielofazowym
