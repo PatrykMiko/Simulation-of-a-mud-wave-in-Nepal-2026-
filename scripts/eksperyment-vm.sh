@@ -5,7 +5,8 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 # All absolute paths passed to Multipass are guest paths. Host files use
 # relative paths so that Git Bash and native Windows agree.
 export MSYS2_ARG_CONV_EXCL='*'
-machine=nepal30
+machine=${NEPAL_VM_NAME:-nepal30}
+[[ $machine =~ ^[a-zA-Z][a-zA-Z0-9-]*$ ]] || { echo 'Niepoprawna nazwa NEPAL_VM_NAME.' >&2; exit 1; }
 guest=/home/ubuntu/nepal30
 command=${1:-help}
 if [[ "$command" == help ]]; then

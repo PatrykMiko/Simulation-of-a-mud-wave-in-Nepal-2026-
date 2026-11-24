@@ -1,4 +1,4 @@
-"""Regression for the requested full-domain ranking, batch barriers and retention."""
+"""Regression for constrained IoU ranking, batch barriers and retention."""
 import csv
 import json
 from pathlib import Path
@@ -6,6 +6,7 @@ from zipfile import ZipFile
 
 from eksperyment import study as S, cli
 from ravaflow_tools.checkpoint import atomic, read
+from eksperyment import objective as O
 
 
 def test_campaign(tmp_path,monkeypatch):
@@ -28,27 +29,32 @@ def test_campaign(tmp_path,monkeypatch):
         iou=0.8 if number in (12,19) else .25
         folder=root/'work'/f't{number:02}'
         target=number!=12
+        summaries=[dict(id=O.load()['points'][0]['id'],arrival_s=350 if target else 5000,
+                        speed_m_s=22.,speed_samples=13,window_complete=True)]
         atomic(folder/'report.json',dict(number=number,params=params,iou_all=iou,
+              **O.score(iou,summaries,O.load()),
               metrics={'all':{'jaccard':iou},'train':{'jaccard':float(target)}},
               reached=target,time_s=120,arrival_s=120 if target else -1,end_reason='safety_cap'))
         (folder/'raster.tif').write_bytes(str(number).encode())
     monkeypatch.setattr(S,'launch',worker)
     S.study(root)
     assert history==[(n,list(range(1,n))) for n in (1,6,11,16)]
-    assert read(root/'finished.json')['winner']==12
-    assert sorted(p.name for p in (root/'artifacts').iterdir())==['t12']
+    assert read(root/'finished.json')['winner']==19
+    assert read(root/'finished.json')['dynamics_pass']
+    assert sorted(p.name for p in (root/'artifacts').iterdir())==['t19']
     with ZipFile(root/'paczka.zip') as z:
         assert z.testzip() is None
-        assert z.read('artifacts/t12/raster.tif')==b'12'
+        assert z.read('artifacts/t19/raster.tif')==b'19'
         assert len([p for p in z.namelist() if p.startswith('records/')])==20
         rows=list(csv.DictReader(z.read('ranking.csv').decode().splitlines()))
-        assert [row['number'] for row in rows[:2]]==['12','19']
+        assert rows[0]['number']=='19'
+        assert rows[-1]['number']=='12'
         p=json.loads(z.read('records/01.json'))['params']
         assert p==read(root/'plans/01.json')
         assert p['solid_fraction']==0.6373316047825536
         instant = {k:v for k,v in p.items() if k!='release_duration_s'}
         assert read(root/'plans/04.json')=={**instant,'mode':'instant','solid_fraction':.5}
-        assert read(root/'plans/09.json')=={**read(root/'plans/04.json'),'manning':.025}
+        assert read(root/'plans/09.json')=={**read(root/'plans/04.json'),'delta':6.,'manning':.022,'entrainment_log10':-9.}
         assert all(read(plan).get('release_duration_s',0)<=300 for plan in (root/'plans').glob('*.json'))
         assert all(read(plan)['solid_fraction']<=p['solid_fraction'] for plan in (root/'plans').glob('*.json'))
 

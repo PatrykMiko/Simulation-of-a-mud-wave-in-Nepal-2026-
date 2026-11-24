@@ -46,6 +46,8 @@ def build():
 '''+anchor)
     code = replace(code, '|| ccontinue == 0 ) { // if defined interval',
                    '|| ccontinue == 0 || tsum >= tmax ) { // if defined interval')
+    anchor = '        if ( (int)(round( 1000 * tint )) >= (int)( round( 1000 * tout )) || ccontinue == 0 || tsum >= tmax )'
+    code = replace(code, anchor, Path(__file__).with_name('dynamics.c.inc').read_text()+'\n'+anchor)
     anchor = '// -- START -- Writing hydrograph infos to files'
     assert code.count(anchor) == 2
     pos = code.rindex(anchor)

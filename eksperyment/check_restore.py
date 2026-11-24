@@ -17,9 +17,11 @@ def sample(root, name):
     cfg=config()
     cfg.update(data_dir=str(root/'data'),study_dir=str(root/'work'),volume_m3=200000,
                output_interval_s=5,release_start_s=0,control_points=[])
+    cfg['dynamics_objective']['points'][0].update(x=340750,y=3111350,radius_m=120)
     p={**BASE,'mode':'gradual','release_duration_s':4}
     result=simulate(cfg,p,root/'work'/name,root/'work/grids/copernicus_30m',cap=90,outlet=(340750,3111350))
-    C.atomic(root/'work'/name/'done.json', {k:result[k] for k in ('iou_all','metrics','volume','time_s','end_reason')})
+    C.atomic(root/'work'/name/'done.json', {k:result[k] for k in
+        ('iou_all','metrics','volume','time_s','end_reason','objective_score','dynamics','dynamics_pass')})
 
 
 def wait(session, condition):
@@ -52,7 +54,8 @@ def verify():
 
         def hashes(name):
             d=root/'work'/name
-            return {str(p.relative_to(d)):C.digest(p) for p in [*d.glob('*.tif'),*(d/'frames').glob('*'),d/'done.json']}
+            return {str(p.relative_to(d)):C.digest(p) for p in
+                [*d.glob('*.tif'),*(d/'frames').glob('*'),d/'done.json',d/'dynamics.csv']}
         expected = hashes('continuous')
         for use_backup in (False, True):
             if use_backup:

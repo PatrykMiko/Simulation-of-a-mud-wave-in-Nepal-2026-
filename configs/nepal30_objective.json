@@ -1,0 +1,30 @@
+{
+  "version": "iou-dynamics-v1",
+  "crs": "EPSG:32645",
+  "sample_interval_s": 5.0,
+  "wet_depth_m": 1.0,
+  "min_wet_cells": 3,
+  "speed_window_s": 60.0,
+  "min_speed_samples": 6,
+  "points": [
+    {
+      "id": "gyirong_proxy_fid3",
+      "x": 340923.538839214,
+      "y": 3129063.230580393,
+      "radius_m": 200.0,
+      "speed_target_m_s": 22.0,
+      "speed_tolerance_factor": 5.0,
+      "arrival_target_s": 350.0,
+      "arrival_tolerance_factor": 5.0,
+      "location_basis": "Existing fid3 at 28.2779807124 N, 85.3780340267 E, Gyirong/Rasuwagadhi sector; spatial proxy, not a surveyed velocity section.",
+      "speed_basis": "Yin et al., DOI 10.16031/j.cghc.202610008: mean arrival speed about 22 m/s at Gyirong. Our local, depth-weighted mean phase speed over the first 60 s is an operational proxy, not an identical observable.",
+      "arrival_basis": "Li et al., DOI 10.1007/s11629-026-1482-y: 14.2 km along Lende in about 350 s. Repository river-axis chainage from projected source centroid to fid3 is about 13.46 km. Model t=0 is source release in the valley; correspondence is approximate.",
+      "uncertainty_basis": "Factor 5 tolerances requested for this screening experiment; NOT measured confidence intervals. Spatial radius, wet threshold and first-wave window are modelling choices. A pass is not independent validation."
+    }
+  ],
+  "references": [
+    "https://www.zgdzzhyfzxb.com/en/article/doi/10.16031/j.cghc.202610008?viewType=HTML",
+    "https://jms.imde.ac.cn/en/article/doi/10.1007/s11629-026-1482-y?viewType=HTML"
+  ],
+  "excluded": "67 m/s concerns the avalanche impact, outside our simulated stage. Unlocated bend speed, run-up and whole-cascade travel time are not calibration targets. The separate 36.2 m/s gorge estimate is context, not a second independent observation."
+}

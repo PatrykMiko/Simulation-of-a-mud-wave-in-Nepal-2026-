@@ -17,6 +17,7 @@ def verify():
         cfg=config()
         cfg.update(data_dir=str(folder/'data'),study_dir=str(folder/'work'),volume_m3=200000,
                    output_interval_s=5,control_points=[])
+        cfg['dynamics_objective']['points'][0].update(x=340750,y=3111350,radius_m=120)
         data=Path(cfg['data_dir'])/'copernicus'
         synthetic.generate(data,volume=cfg['volume_m3'],nrows=96,ncols=96,xll=339990,yll=3110010)
         grid=N.prepare(cfg,1)
@@ -24,6 +25,7 @@ def verify():
             p={**BASE,'mode':mode,'release_duration_s':4}
             result=simulate(cfg,p,folder/mode,grid,cap=20,outlet=(340750,3111350))
             assert result['time_s']>=20 and result['end_reason']=='safety_cap'
+            assert (folder/mode/'dynamics.csv').is_file()
             if mode=='gradual':
                 render(folder/mode,data)
                 # Compare the actual native grid to the unmodified installed solver.

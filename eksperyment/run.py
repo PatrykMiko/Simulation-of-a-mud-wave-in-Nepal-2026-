@@ -11,6 +11,7 @@ import numpy as np
 from ravaflow_tools import nepal as N, runner, metrics as M
 from nepal_gradual.simulation import model_config as gradual_config
 from .build import PREFIX, ROOT
+from . import objective as O
 
 OUT = ROOT/'wyniki'
 CAP = 43200
@@ -22,7 +23,7 @@ OUTLET = (300225.,3076875.)
 def config():
     cfg=N.load(N.DEFAULT)
     cfg.update(study_dir=str(OUT/'work'), timeout_seconds=None, release_start_s=0,
-               output_interval_s=INTERVAL)
+               output_interval_s=INTERVAL, dynamics_objective=O.load())
     return cfg
 
 
@@ -41,6 +42,11 @@ def simulate(cfg, params, directory, grid, cap=CAP, outlet=OUTLET):
                         'export NEPAL_VALID='+shlex.quote(str(mask)),
                         'export NEPAL_FRAME_DIR='+shlex.quote(str(frames)),
                         f'export NEPAL_OUTLET_X={outlet[0]} NEPAL_OUTLET_Y={outlet[1]}']
+    spec=cfg.get('dynamics_objective')
+    if spec:
+        samples=O.prepare(spec,grid,directory)
+        rc['pre_commands'] += ['export NEPAL_DYNAMICS_SPEC='+shlex.quote(str(samples)),
+                               'export NEPAL_DYNAMICS_CSV='+shlex.quote(str(directory/'dynamics.csv'))]
     N.write_json(directory/'run.json',rc)
     began = time.time()
     try:
@@ -66,6 +72,7 @@ def simulate(cfg, params, directory, grid, cap=CAP, outlet=OUTLET):
     iou=metrics['all']['jaccard']
     if not math.isfinite(iou):
         raise ValueError('Nieokreślony IoU')
+    objective=O.evaluate(directory/'dynamics.csv',iou,spec) if spec else {}
     # Export portable final fields, then remove redundant GRASS/ASCII.
     import rasterio
     from rasterio.transform import from_origin
@@ -103,7 +110,7 @@ def simulate(cfg, params, directory, grid, cap=CAP, outlet=OUTLET):
     # Optional outputs not needed after validated portable exports.
     shutil.rmtree(directory/'grass')
     shutil.rmtree(result['results_dir'])
-    return dict(params=params,iou_all=iou,metrics=metrics,time_s=float(last['time']),
+    return dict(**objective,params=params,iou_all=iou,metrics=metrics,time_s=float(last['time']),
                 reached=float(last['arrival'])>=0,arrival_s=float(last['arrival']),
                 end_reason=last['reason'],volume=audit,elapsed_s_including_pauses=time.time()-began)
 

@@ -1,6 +1,7 @@
 # Eksperyment 2 z paczki Cascadia (spływ gruzowy, 3 fazy) - test całego łańcucha.
 # Uruchamiać z katalogu głównego projektu.
 workdir: data/cascadia                      # tu leżą DATA/ i tu powstaną wyniki
+allow_projection_override: true           # przykład w lokalnym układzie XY
 grass_mapset: ~/grassdata/xy_loc/PERMANENT  # lokalizacja Generic XY
 region_from: ca_elev                        # raster, z którego ustawiamy region
 

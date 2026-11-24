@@ -12,6 +12,7 @@ from ravaflow_tools import checkpoint as C, nepal as N
 from .design import batch
 from .run import OUT, config
 from .render import render
+from . import objective as O
 
 
 def records(root):
@@ -19,7 +20,7 @@ def records(root):
 
 
 def refresh(root):
-    rows = sorted(records(root), key=lambda r: (-r['iou_all'], r['number']))
+    rows = sorted(records(root), key=O.ranking_key)
     if not rows:
         return
     best = rows[0]
@@ -27,7 +28,8 @@ def refresh(root):
     if not (winner/'report.json').is_file():
         raise RuntimeError(f'Brakuje plików lidera {winner}')
     C.atomic(root/'best.json', {**best, 'directory': str(winner.relative_to(root))})
-    keys = ['number', 'iou_all', 'reached', 'arrival_s', 'time_s', 'end_reason']
+    keys = ['number', 'objective_score', 'dynamics_pass', 'model_status', 'iou_all',
+            'dynamics_quality', 'reached', 'arrival_s', 'time_s', 'end_reason']
     tmp = root/'ranking.tmp'
     with tmp.open('w') as f:
         writer = csv.DictWriter(f, keys, extrasaction='ignore')
@@ -48,6 +50,9 @@ def accept(root, number):
     report = C.read(staged/'report.json')
     if report['number'] != number or report['iou_all'] != report['metrics']['all']['jaccard']:
         raise ValueError(f'Niespójny raport {number}')
+    recomputed=O.score(report['iou_all'],report['dynamics'],O.load())
+    if any(report.get(k)!=recomputed[k] for k in recomputed):
+        raise ValueError('Niespójna funkcja celu lub inny protokół dynamiki.')
     C.atomic(root/'records'/f'{number:02}.json', report)
     refresh(root)
 
@@ -75,7 +80,10 @@ def finish(root, cfg):
     with tmp.open('rb') as stream:
         os.fsync(stream.fileno())
     tmp.replace(root/'paczka.zip')
-    C.atomic(root/'finished.json',dict(trials=20,winner=best['number'],iou_all=best['iou_all']))
+    C.atomic(root/'finished.json',dict(trials=20,winner=best['number'],iou_all=best['iou_all'],
+        objective_score=best['objective_score'],dynamics_pass=best['dynamics_pass'],model_status=best['model_status']))
+    if not best['dynamics_pass']:
+        print('BRAK ZAAKCEPTOWANEJ DYNAMIKI. Zachowano najlepszą próbę diagnostyczną, nie zatwierdzony model.',flush=True)
 
 
 def study(root=OUT):
@@ -88,7 +96,11 @@ def study(root=OUT):
     grid=N.prepare(cfg,1)
     from .cli import signature
     from .run import CAP, INTERVAL, OUTLET
-    C.atomic(root/'protocol.json',dict(objective='all.jaccard',threshold_m=.1,
+    spec=O.load()
+    protocol=root/'protocol.json'
+    if protocol.exists() and C.read(protocol).get('objective')!=spec:
+        raise ValueError('Zmieniono protokół. Zachowaj starą serię i użyj pustego katalogu wyniki.')
+    C.atomic(protocol,dict(objective=spec,threshold_m=.1,
         source_excluded=True,concurrent_workers=workers,cap_s=CAP,interval_s=INTERVAL,outlet_epsg32645=OUTLET,
         grid=C.read(grid/'manifest.json'),environment=signature()))
     for first in (1,6,11,16):
@@ -123,7 +135,8 @@ def study(root=OUT):
                     errors.append(n)
                     continue
                 accept(root,n)
-                print(f'Próba {n} ukończona, IoU całego obszaru {C.read(root/"records"/f"{n:02}.json")["iou_all"]:.6f}',flush=True)
+                row=C.read(root/'records'/f'{n:02}.json')
+                print(f'Próba {n}: IoU={row["iou_all"]:.6f}, cel={row["objective_score"]:.6f}, dynamika={row["dynamics_pass"]}',flush=True)
         if errors:
             raise RuntimeError(f'Błędy prób {errors}. Szczegóły w logach solvera.')
     refresh(root)

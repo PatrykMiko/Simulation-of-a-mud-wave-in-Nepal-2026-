@@ -2,6 +2,19 @@
 
 Po sklonowaniu gałęzi `main` otwórz terminal w folderze z tym plikiem. Dane Nepalu i źródła r.avaflow są w repo. Wszystkie próby działają na **CPU**. Gotowym plikiem do wysłania będzie **`wyniki/paczka.zip`**.
 
+Aktualny protokół to **`iou-dynamics-v1`**: 10 zaplanowanych prób + 5 adaptacyjnych + 5 adaptacyjnych, wszystkie na 30 m. Wśród prób spełniających szerokie tolerancje dynamiki wygrywa najwyższe **IoU całości**. Tolerancje dla przybliżonego sektora Gyirong: **4,4–110 m/s** oraz **70–1750 s od uwolnienia w dolinie**. Optuna uczy się również z wielkości przekroczeń. To filtr skrajnych rozbieżności, nie potwierdzenie poprawności całego zdarzenia. Pełny protokół i pierwsze dziesięć zestawów są w [OPIS.md](OPIS.md).
+
+## Pobranie repozytorium
+
+W Git Bash na Windowsie lub terminalu na Linux/macOS:
+
+```bash
+git clone --branch main https://github.com/PatrykMiko/Simulation-of-a-mud-wave-in-Nepal-2026-.git
+cd Simulation-of-a-mud-wave-in-Nepal-2026-
+```
+
+Jeśli repo jest prywatne, najpierw przyjmij zaproszenie do repozytorium i zaloguj się w GitHubie zgodnie z komunikatem Git. Dalej wybierz jedną ścieżkę instalacji. Instalator sam buduje r.avaflow i instaluje GRASS, Pythona, Optunę, DMTCP oraz narzędzia eksportu.
+
 ## Wybierz sposób uruchomienia
 
 | System komputera | Środowisko obliczeń | Terminal do poniższych poleceń |
@@ -73,11 +86,11 @@ Każda próba sama dobiera moment zakończenia według tych samych reguł. Co 12
 - **Gdy fala jeszcze nie dotarła**, od 7200 s program sprawdza, czy przez pełną symulowaną godzinę pole zalane kiedykolwiek poza źródłem zwiększyło się najwyżej o 0,5%, a zalanie zbliżyło się do punktu końcowego o mniej niż 30 m. Jeśli oba warunki się utrzymują, kończy próbę z powodem `stalled`. Najwcześniej wypada to około 10 800 s (3 h zdarzenia).
 - **Gdy solver zgłosi ustanie przepływu**, próba może skończyć się wcześniej. Jeśli fala wciąż się przemieszcza, górny limit wynosi 43 200 s, czyli 12 godzin **modelowanego zdarzenia**.
 
-Czas pracy komputera zależy od sprzętu, liczby równoległych prób i kroku numerycznego. Po pierwszej grupie masz pierwszy pomiar dla swojej maszyny. Końcowe IoU całego ocenianego obszaru wyznacza miejsce w rankingu. Raport podaje osobno czas symulowany, powód zakończenia i informację o dojściu.
+Czas pracy komputera zależy od sprzętu, liczby równoległych prób i kroku numerycznego. Po pierwszej grupie masz pierwszy pomiar dla swojej maszyny. Najpierw wymagamy spełnienia szerokich tolerancji dynamiki, a wśród takich prób końcowe IoU całości wyznacza miejsce w rankingu. Czas dojścia do Gyirong mierzymy osobno co około 5 s; nie jest to czas dotarcia do końca całej domeny. Raport podaje osobno czas symulowany, powód zakończenia i informację o dojściu.
 
 ## Co wysłać
 
-Po komunikacie „Zakończono” wyślij **`wyniki/paczka.zip`**. Program sam tworzy archiwum i sprawdza jego CRC. `ranking.csv` jest posortowany malejąco według końcowego IoU całości. `best.json` wskazuje katalog zwycięzcy. W nim są m.in. `zasieg.png`, `glebokosc.png`, `fala.mp4`, georeferencyjne rastry, bilans i klatki z głębokością i prędkościami faz. Z każdej przegranej próby pozostaje raport JSON. Szczegółowe założenia i definicje zawiera [OPIS.md](OPIS.md).
+Po komunikacie „Zakończono” wyślij **`wyniki/paczka.zip`**. Program sam tworzy archiwum i sprawdza jego CRC. `ranking.csv` sortuje po `objective_score`: najpierw próby spełniające tolerancje, w ich obrębie malejące IoU całości. `records/NN.json` zawiera prędkość i czas w sektorze Gyirong dla każdej próby. Gdy wszystkie mają `dynamics_pass=false`, zachowujemy najlepszą diagnostyczną próbę, a komunikat **BRAK ZAAKCEPTOWANEJ DYNAMIKI** oznacza, że nie znaleziono modelu spełniającego nawet szerokie tolerancje. Nie trzeba uruchamiać dodatkowego finału. `best.json` wskazuje katalog zwycięzcy. W nim są m.in. `zasieg.png`, `glebokosc.png`, `fala.mp4`, georeferencyjne rastry, bilans i klatki z głębokością i prędkościami faz. Z każdej przegranej próby pozostaje raport JSON. Szczegółowe założenia i definicje zawiera [OPIS.md](OPIS.md).
 
 ## Jeśli instalacja lub start się nie uda
 
@@ -85,4 +98,26 @@ Otwórz repozytorium w **Claude Code** i poproś Claude’a o zdiagnozowanie ora
 
 Przykładowa prośba do Claude’a:
 
-> Przeczytaj SYMULACJA.md i OPIS.md. Na moim komputerze polecenie […] zakończyło się komunikatem […]. Znajdź przyczynę, popraw instalację lub uruchomienie i sprawdź naprawę. Zachowaj parametry eksperymentu, metrykę IoU, wyniki i checkpointy. Jeśli istnieje zapis aktywnej serii, przed zmianą jej środowiska sprawdź, czy nadal będzie możliwe wznowienie. Przed pierwszą pełną serią potwierdź wynik syntetycznego testu zapisu i odtworzenia.
+> Przeczytaj SYMULACJA.md i OPIS.md. Na moim komputerze polecenie […] zakończyło się komunikatem […]. Znajdź przyczynę, popraw instalację lub uruchomienie i sprawdź naprawę. Zachowaj parametry eksperymentu, protokół iou-dynamics-v1, ograniczenia dynamiki, metrykę IoU, wyniki i checkpointy. Jeśli istnieje zapis aktywnej serii, przed zmianą jej środowiska sprawdź, czy nadal będzie możliwe wznowienie. Przed pierwszą pełną serią potwierdź wynik syntetycznego testu zapisu i odtworzenia.
+
+## Jeśli repo pobrano przed zmianą celu
+
+Jeśli nie rozpoczęto obliczeń, wykonaj `git pull --ff-only origin main` w klonie. Na natywnym Ubuntu przebuduj rdzeń i zalicz test:
+
+```bash
+.venv/bin/python -B -m eksperyment.build
+./scripts/eksperyment.sh verify
+./scripts/eksperyment.sh start
+```
+
+W Multipass instalator celowo nie nadpisuje innej wersji projektu w istniejącej maszynie. Dla nowego protokołu wybierz osobną maszynę; poprzednia zostaje zachowana. Przykład dla jednej próby naraz:
+
+```bash
+export NEPAL_VM_NAME=nepal30-dynamics
+bash scripts/eksperyment-vm.sh install 2 16G 80G
+bash scripts/eksperyment-vm.sh start
+```
+
+W każdym nowym terminalu do obsługi tej maszyny ponownie wykonaj `export NEPAL_VM_NAME=nepal30-dynamics`. Następnie polecenia `status`, `save-stop`, `start`, `recover` i `export` są takie jak w tabeli. Instalator przenosi aktualny commit, przebudowuje rdzeń i wykonuje weryfikację. Osobna maszyna wymaga osobnego miejsca na dysku.
+
+Jeśli istnieją stare wyniki lub checkpoint, **nie podmieniaj kodu w działającej lub zapisanej serii**. Zachowaj stary klon i środowisko do wznowienia, a nowy eksperyment rozpocznij w oddzielnym klonie z pustym `wyniki` (w Multipass także z inną nazwą maszyny, zgodnie z opcją skryptu). Nie usuwaj checkpointu tylko po to, żeby ominąć kontrolę zgodności. Nie aktualizuj systemu, bibliotek ani kodu między zapisem i wznowieniem nowej serii.

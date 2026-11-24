@@ -22,6 +22,7 @@ GIB = disk.GIB
 
 def signature():
     paths = [*sorted((ROOT/'eksperyment').glob('*.py')), ROOT/'eksperyment/monitor.c.inc',
+             ROOT/'eksperyment/dynamics.c.inc', ROOT/'configs/nepal30_objective.json',
              ROOT/'nepal_final/disk.py', ROOT/'nepal_gradual/simulation.py',
              ROOT/'nepal_gradual/bootstrap/sitecustomize.py', ROOT/'configs/nepal_v2.yaml',
              ROOT/'configs/nepal_v2_final30.yaml', PREFIX/'r.avaflow.main', PREFIX/'r.avaflow.40G']
@@ -52,6 +53,9 @@ def status():
     if (OUT/'best.json').exists():
         best=C.read(OUT/'best.json')
         print('Najlepsza próba:',best['number'],'IoU całości:',best['iou_all'])
+        print('Cel:',best.get('objective_score'),'Dynamika:',best.get('model_status'))
+        for p in best.get('dynamics',[]):
+            print(p['id'],'dojście [s]:',p['arrival_s'],'prędkość [m/s]:',p['speed_m_s'])
 
 
 def save_locked(reason):

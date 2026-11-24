@@ -1,12 +1,37 @@
 # Rekonstrukcja fali poniżej blokady w dolinie Lhende Khola
 
-Badamy, która z 20 konfiguracji r.avaflow 4.0G Rev.7 na siatce 30 m najlepiej odtwarza obserwowany zasięg fali od blokady do zachodniego końca kartowanego odcinka. Każda próba jest pełnym rozwiązaniem równań. Zwycięzca jest gotową symulacją. Instrukcję uruchomienia zawiera [SYMULACJA.md](SYMULACJA.md).
+Badamy, która z 20 konfiguracji r.avaflow 4.0G Rev.7 na siatce 30 m najlepiej odtwarza obserwowany zasięg fali od blokady do zachodniego końca kartowanego odcinka. Każda próba jest pełnym rozwiązaniem równań. Zwycięzca jest gotową symulacją do dalszej oceny; brak spełnienia ograniczeń jest jawnie raportowany. Instrukcję uruchomienia zawiera [SYMULACJA.md](SYMULACJA.md).
 
 ## Jak wybieramy zwycięzcę
 
-Optuna maksymalizuje tę samą liczbę, którą sortuje ranking: **końcowe IoU całego ocenianego obszaru**. W rastrze modelowym komórka jest zalana, jeśli maksymalna w całym przebiegu łączna głębokość mieszaniny osiągnęła 0,1 m. Na natywnej siatce porównujemy ten zasięg z mapą obserwowaną. Bierzemy wszystkie komórki ze znanym stanem 0 lub 1 poza narzuconym poligonem źródła. IoU to TP / (TP + FP + FN). Nadmierny rozlew zwiększa FP, a pominięty fragment doliny zwiększa FN. Przy identycznej wartości wygrywa niższy numer próby.
+Protokół `iou-dynamics-v1` maksymalizuje **IoU całego ocenianego obszaru przy szerokich ograniczeniach dynamiki**. Definicję, lokalizację, wartości odniesienia i uzasadnienie zapisano w [configs/nepal30_objective.json](configs/nepal30_objective.json). Ten sam cel obowiązuje Optunę, ranking i zachowywanie ciężkich plików.
 
-Raportujemy osobno dojście do końca, czas zakończenia, precision, recall, nadmiar i niedobór pola oraz diagnostykę obu części doliny. Próba z najwyższym IoU zachowuje pierwsze miejsce także wtedy, gdy jej czoło zatrzymało się wcześniej. Zachodnia część doliny uczestniczy w optymalizacji. Wynik jest dopasowaniem do mapy tego zdarzenia. Niezależna ocena prędkości, głębokości i czasu dojścia wymaga osobnych obserwacji. Poprzedni częściowy przebieg przy 6000 s miał IoU całości **0,240441**, kalibracyjne **0,301716**. Porównanie z końcowym wynikiem nowej serii obejmie również zmianę horyzontu.
+W rastrze modelowym komórka jest zalana, jeśli maksymalna w całym przebiegu łączna głębokość mieszaniny osiągnęła 0,1 m. Na natywnej siatce porównujemy ten zasięg z mapą obserwowaną. Bierzemy wszystkie komórki ze znanym stanem 0 lub 1 poza narzuconym poligonem źródła. IoU = TP / (TP + FP + FN). Zachodnia część doliny również uczestniczy w dopasowaniu; nie jest niezależną walidacją.
+
+1. Próby spełniające tolerancje czasu i prędkości zawsze poprzedzają pozostałe. Wśród nich **wygrywa najwyższe IoU**. Przy remisie wygrywa niższy numer.
+2. Wartość celu dla spełnionych ograniczeń: `score = 0.5 + 0.5 * IoU`.
+3. Dla niespełnionych ograniczeń: `score = 0.49 * IoU * (0.8 + 0.2 * Q)`, gdzie `Q` jest średnią jakości czasu i prędkości. Jakość pojedynczej wielkości wynosi `exp(-0.5 * (ln(model/reference) / ln(5))²)`. Brak dojścia daje zerową jakość obu wielkości. Niekompletne okno prędkości daje zerową jakość prędkości. IoU nadal dominuje w wyborze próby diagnostycznej.
+4. TPE otrzymuje dodatkowo dwa ciągłe ograniczenia: `abs(ln(model/reference))/ln(5) - 1`. Wynik ≤0 oznacza spełnienie warunku. Brak danych lub niekompletne okno to naruszenie o wartości 2. Przekazujemy wszystkie ukończone próby z tej serii, również niespełniające ograniczeń. Pozwala to uczyć się, w którą stronę zmieniać parametry. Nie gwarantuje znalezienia dopuszczalnego wariantu w 20 próbach.
+5. Jeśli nikt nie spełni tolerancji, zapisujemy najlepszy wynik diagnostyczny z `model_status=no_acceptable_dynamics`. Powstaje ZIP i animacja, ale raport wyraźnie mówi **BRAK ZAAKCEPTOWANEJ DYNAMIKI**. Spełnienie filtra (`screening_pass`) nie jest potwierdzeniem odtworzenia całego zdarzenia.
+
+## Dynamika: obserwacje, przybliżenia i tolerancje
+
+Punkt `gyirong_proxy_fid3` ma współrzędne E=340923,538839 m, N=3129063,230580 m (UTM 45N), czyli około 28,277981°N, 85,378034°E. To istniejący punkt 3 w rejonie przejścia Gyirong–Rasuwagadhi, rozpoznany po współrzędnych; sam plik GPKG nie zawiera nazwy ani pomiaru. Używamy sąsiedztwa o promieniu 200 m jako **przybliżenia sektora**, nie dokładnie zinwentaryzowanego przekroju pomiarowego. Przed publikacją trzeba sprawdzić lokalizację względem rycin i przekrojów oryginalnych badań.
+
+| Wielkość | Odniesienie | Szeroka tolerancja eksperymentalna |
+|---|---|---|
+| Prędkość pierwszej fali w rejonie Gyirong | około 22 m/s | **4,4–110 m/s** |
+| Czas od uwolnienia źródła w dolinie do sektora Gyirong | około 350 s, przybliżenie etapu rzecznego | **70–1750 s**, około 1–29 minut |
+
+[Yin i in.](https://www.zgdzzhyfzxb.com/en/article/doi/10.16031/j.cghc.202610008?viewType=HTML) podają około 22 m/s przy dotarciu do Gyirong. [Li i in.](https://jms.imde.ac.cn/en/article/doi/10.1007/s11629-026-1482-y?viewType=HTML) opisują przejście 14,2 km wzdłuż Lende w około 350 s i średnią prędkość przekrojową 36,2 m/s przy szczycie przepływu w pobliskim wąwozie. Te prędkości dotyczą różnych charakterystyk. Drugiej nie traktujemy jako niezależnego pomiaru tego samego wskaźnika. Nie dopasowujemy 67 m/s z uderzenia początkowego obrywu.
+
+Na osi rzeki w repo od rzutu środka naszego poligonu źródłowego do rzutu fid3 jest około **13,46 km**. Odległości poprzeczne od osi wynoszą odpowiednio około 449 i 61 m. Podobieństwo długości wspiera orientacyjne porównanie etapu rzecznego, ale nie dowodzi identyczności początków odcinka ani początku czasu. Model liczy od uwalniania w dolinie, nie od obrywu na szczycie. Nie wymuszamy dotarcia do zachodniego końca całej domeny w 350 s.
+
+Tolerancje są **pięciokrotne**, zgodnie z decyzją o odrzucaniu głównie skrajnych przypadków. Nie pochodzą z oszacowania błędu pomiaru i nie są przedziałami ufności. Tak szeroki filtr może dopuścić znaczne rozbieżności dynamiki. Po kampanii konieczna jest analiza wartości liczbowych i niepewności, nawet jeśli `dynamics_pass=true`. Użyte do optymalizacji wielkości nie stanowią już niezależnej walidacji.
+
+Próbkowanie odbywa się na pierwszym kroku fizycznym po każdym progu 5 s, niezależnie od klatek animacji co 120 s. Dojście oznacza jednocześnie co najmniej trzy poprawne komórki poza źródłem, o głębokości ≥1 m w promieniu 200 m. Pomijamy cienką warstwę czoła. W każdej próbce liczymy `sum(h1*v1 + h2*v2 + h3*v3) / sum(h1+h2+h3)` po tych komórkach. Do oceny bierzemy średnią z próbek w pierwszych 60 s od dojścia, co najmniej sześć próbek i pełne okno. To lokalna średnia modułów prędkości faz ważona objętością, **przybliżenie** prędkości pierwszej fali, nie pomiar przekrojowy ani prędkość czoła. Późniejszy przypadkowy pik nie poprawi oceny. Progi głębokości, promień i okno są jawnymi wyborami protokołu.
+
+Raportujemy również precision, recall, nadmiar i niedobór pola, bilans, dojście do końca domeny i powód zakończenia. Poprzedni częściowy przebieg przy 6000 s miał IoU całości 0,240441 i kalibracyjne 0,301716. Jest historycznym odniesieniem, nie ukończoną próbą nowego protokołu.
 
 ## Dane i założenia o źródle
 
@@ -25,13 +50,15 @@ Pierwsza konfiguracja powtarza parametry najlepszej wcześniejszej próby kalibr
 | 1 | φ=35°, δ=8,1915967643°, udział stały 0,6373316048, Manning 0,03033694194, log₁₀ erozji −8,491546965, uwalnianie 200,606630818 s | punkt odniesienia |
 | 2 | uwolnienie natychmiastowe | sam przebieg czasowy zasilania |
 | 3 | udział stały 0,50 | większy udział wody |
-| 4 | natychmiastowo, 50% fazy stałej / 50% wody, opory i erozja jak w próbie 1 | wpływ impulsu przy składzie 50/50 (porównanie z 3), wpływ Manninga przy tym samym impulsie (porównanie z 9) |
+| 4 | natychmiastowo, 50% fazy stałej / 50% wody, opory i erozja jak w próbie 1 | wpływ impulsu przy składzie 50/50 (porównanie z 3) |
 | 5 | δ=6° | mniejsze tarcie podłoża |
 | 6 | Manning 0,022 | mniejszy opór fazy płynnej |
 | 7 | log₁₀ erozji −8,0 | szybsze pobieranie materiału |
 | 8 | log₁₀ erozji −9,0 | wolniejsze pobieranie materiału |
-| 9 | natychmiastowo, udział stały 0,50, Manning 0,025 | impuls bardziej wodnej mieszaniny |
-| 10 | uwalnianie 120 s, δ=7°, φ=33°, log₁₀ erozji −8,7 | szybszy dopływ, mniejsze tarcie i słabsza erozja |
+| 9 | natychmiastowo, udział stały 0,50, δ=6°, Manning 0,022, log₁₀ erozji −9 | hipoteza szybszej propagacji: mniejsze opory i słabsze pobieranie podłoża |
+| 10 | uwalnianie 90 s, udział stały 0,55, δ=7°, φ=33°, Manning 0,025, log₁₀ erozji −8,7 | krótsze zasilanie przy bardziej wodnej mieszaninie i umiarkowanie mniejszych oporach |
+
+Próby 1–8 zachowują punkt odniesienia i porównania pojedynczych zmian; 9–10 łączą zmiany pod hipotezę sprawniejszej propagacji. Mniejsze opory mogą zwiększyć nadmierny rozlew, a erozja wpływa zarówno na masę, jak i pęd. Nie zakładamy monotonicznej poprawy ani nie gwarantujemy wysokiego IoU.
 
 Po komplecie dziesięciu wyników Optuna TPE proponuje 11–15. Po komplecie piętnastu proponuje 16–20. W obrębie grupy propozycje oczekujące są oznaczone jako trwające (`constant_liar`), a plan jest zapisany przed startem pracowników. Zakresy adaptacyjne to φ 30–38°, δ 5–12°, udział stały od 0,50 do wartości bazowej 0,6373316047825536, Manning 0,020–0,045 w skali logarytmicznej, log₁₀ współczynnika erozji od −9 do −7,5, tryb natychmiastowy lub stopniowy, a dla stopniowego czas 60–300 s w skali logarytmicznej. Poprzednie wyniki pomogły wybrać punkt startowy. Uczenie TPE korzysta wyłącznie z prób ocenianych na 30 m tym samym protokołem.
 
@@ -48,8 +75,12 @@ Prywatna modyfikacja Rev.7 odczytuje pola po kroku fizycznym, stosuje tę reguł
 
 ## Jak odczytać wyniki
 
-`ranking.csv` podaje IoU, czas zdarzenia, dojście i powód zakończenia każdej próby. `records/NN.json` dodatkowo zachowuje dokładne parametry, bilans i tablice metryk. `protocol.json` zawiera skróty danych i wersję środowiska. Duże pliki przegranych są usuwane po przyjęciu raportu. Po zakończeniu wszystkich prób program renderuje zwycięzcę z zachowanych klatek, bez ponownego liczenia równań.
+`ranking.csv` podaje `objective_score`, `dynamics_pass`, `model_status`, IoU, czas zdarzenia, dojście i powód zakończenia każdej próby. Jest sortowany według wspólnej funkcji celu opisanej wyżej. `arrival_s` w głównych kolumnach dotyczy końca domeny; czas w sektorze Gyirong jest w `dynamics[0].arrival_s` raportu JSON. `records/NN.json` dodatkowo zachowuje dokładne parametry, bilans, tablice metryk, czas i prędkość w punkcie kontrolnym, ograniczenia TPE i ocenę dynamiki. `protocol.json` zawiera skróty danych, wersję środowiska oraz pełną definicję i źródła celu. `dynamics.csv` zwycięzcy zawiera bez nagłówka: czas [s], indeks punktu od zera, liczbę mokrych komórek, sumę głębokości i sumę iloczynów głębokości faz oraz ich prędkości. To mały szereg co około 5 s. Duże pliki przegranych są usuwane po przyjęciu raportu. Po zakończeniu wszystkich prób program renderuje zwycięzcę z zachowanych klatek, bez ponownego liczenia równań.
 
 Wyniki zwycięzcy obejmują mapę zgodności TP/FP/FN, maksymalną głębokość, film chwilowego zalania, rastry GeoTIFF `hflow_max`, `treach`, `vfront`, `vhmax`, `basechange_fin` oraz szeregi czasowe i parametry zastosowane przez solver. Pliki `frames/NNNNN.bin` zawierają rekordy little-endian: indeks komórki int32 w porządku wierszowym od północy, głębokość float32 [m], prędkości faz 1 i 3 float32 [m/s]. Zapis obejmuje komórki z głębokością ≥0,1 m we wnętrzu siatki obliczeniowej. `timeline.csv` ma kolumny bez nagłówka: numer klatki, czas [s], liczba zalanych kiedykolwiek ocenianych komórek, liczba aktualnie zalanych ocenianych komórek przy ujściu, czas pierwszego wykrycia (−1 do czasu dojścia), stan. Czas trwania 20 prób na komputerze kolegi można oszacować po pierwszej piątce. Przy pięciu równoległych procesach czas całej serii jest w przybliżeniu sumą czasów najwolniejszej próby z każdej z czterech grup.
 
 Po godzinie pracy lub zakończeniu grupy 5, 10 i 15 prób nadzór utrwala dodatkową kopię do odzyskiwania, obejmującą stan aktywnych solverów i ich pliki. Taka kopia może tymczasowo zawierać pliki próby, która później przegra. Po prawidłowym ukończeniu całej serii usuwa ją nadzór. Do paczki wynikowej wchodzą raporty oraz dane zwycięzcy. Wszystkie obliczenia fizyczne wykonuje CPU.
+
+## Zmiana protokołu i odtwarzanie
+
+Kod celu, definicja punktu i monitor dynamiki wchodzą do sygnatury checkpointu. Starej serii IoU-only nie wznawia się nowym kodem ani nie miesza z nowym rankingiem. Przy nowym klonie katalog `wyniki` jest pusty. Po aktualizacji istniejącej instalacji potrzebna jest ponowna kompilacja i weryfikacja, opisane w SYMULACJA.md. W obrębie niezmienionej serii zachowane są ręczne i automatyczne checkpointy, także w trakcie pojedynczej próby.
