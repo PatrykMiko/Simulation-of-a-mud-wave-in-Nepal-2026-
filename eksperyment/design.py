@@ -6,14 +6,14 @@ from .build import ROOT
 
 BASE = yaml.safe_load((ROOT/'configs/nepal_v2_final30.yaml').read_text())['fixed_params']
 CHANGES = [
-    {}, {'mode':'instant'}, {'solid_fraction':.5}, {'release_duration_s':600.0},
+    {}, {'mode':'instant'}, {'solid_fraction':.5}, {'mode':'instant','solid_fraction':.5},
     {'delta':6.0}, {'manning':.022}, {'entrainment_log10':-8.0},
     {'entrainment_log10':-9.0}, {'mode':'instant','solid_fraction':.5,'manning':.025},
     {'release_duration_s':120.,'delta':7.,'phi':33.,'entrainment_log10':-8.7},
 ]
 SPACE = dict(phi=FD(30,38), delta=FD(5,12), solid_fraction=FD(.5,BASE['solid_fraction']),
              manning=FD(.02,.045,log=True), entrainment_log10=FD(-9,-7.5),
-             mode=CD(('instant','gradual')), release_duration_s=FD(60,600,log=True))
+             mode=CD(('instant','gradual')), release_duration_s=FD(60,300,log=True))
 
 
 def batch(start, history):

@@ -25,7 +25,7 @@ Pierwsza konfiguracja powtarza parametry najlepszej wcześniejszej próby kalibr
 | 1 | φ=35°, δ=8,1915967643°, udział stały 0,6373316048, Manning 0,03033694194, log₁₀ erozji −8,491546965, uwalnianie 200,606630818 s | punkt odniesienia |
 | 2 | uwolnienie natychmiastowe | sam przebieg czasowy zasilania |
 | 3 | udział stały 0,50 | większy udział wody |
-| 4 | uwalnianie 600 s, skład jak w próbie 1 | czy łagodniejszy wypływ tej samej objętości zmniejszy początkowy rozlew i zmieni wybieg |
+| 4 | natychmiastowo, 50% fazy stałej / 50% wody, opory i erozja jak w próbie 1 | wpływ impulsu przy składzie 50/50 (porównanie z 3), wpływ Manninga przy tym samym impulsie (porównanie z 9) |
 | 5 | δ=6° | mniejsze tarcie podłoża |
 | 6 | Manning 0,022 | mniejszy opór fazy płynnej |
 | 7 | log₁₀ erozji −8,0 | szybsze pobieranie materiału |
@@ -33,7 +33,7 @@ Pierwsza konfiguracja powtarza parametry najlepszej wcześniejszej próby kalibr
 | 9 | natychmiastowo, udział stały 0,50, Manning 0,025 | impuls bardziej wodnej mieszaniny |
 | 10 | uwalnianie 120 s, δ=7°, φ=33°, log₁₀ erozji −8,7 | szybszy dopływ, mniejsze tarcie i słabsza erozja |
 
-Po komplecie dziesięciu wyników Optuna TPE proponuje 11–15. Po komplecie piętnastu proponuje 16–20. W obrębie grupy propozycje oczekujące są oznaczone jako trwające (`constant_liar`), a plan jest zapisany przed startem pracowników. Zakresy adaptacyjne to φ 30–38°, δ 5–12°, udział stały od 0,50 do wartości bazowej 0,6373316047825536, Manning 0,020–0,045 w skali logarytmicznej, log₁₀ współczynnika erozji od −9 do −7,5, tryb natychmiastowy lub stopniowy, a dla stopniowego czas 60–600 s w skali logarytmicznej. Poprzednie wyniki pomogły wybrać punkt startowy. Uczenie TPE korzysta wyłącznie z prób ocenianych na 30 m tym samym protokołem.
+Po komplecie dziesięciu wyników Optuna TPE proponuje 11–15. Po komplecie piętnastu proponuje 16–20. W obrębie grupy propozycje oczekujące są oznaczone jako trwające (`constant_liar`), a plan jest zapisany przed startem pracowników. Zakresy adaptacyjne to φ 30–38°, δ 5–12°, udział stały od 0,50 do wartości bazowej 0,6373316047825536, Manning 0,020–0,045 w skali logarytmicznej, log₁₀ współczynnika erozji od −9 do −7,5, tryb natychmiastowy lub stopniowy, a dla stopniowego czas 60–300 s w skali logarytmicznej. Poprzednie wyniki pomogły wybrać punkt startowy. Uczenie TPE korzysta wyłącznie z prób ocenianych na 30 m tym samym protokołem.
 
 ## Kiedy kończy się symulacja
 

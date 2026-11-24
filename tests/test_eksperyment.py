@@ -46,7 +46,10 @@ def test_campaign(tmp_path,monkeypatch):
         p=json.loads(z.read('records/01.json'))['params']
         assert p==read(root/'plans/01.json')
         assert p['solid_fraction']==0.6373316047825536
-        assert read(root/'plans/04.json')=={**p,'release_duration_s':600.}
+        instant = {k:v for k,v in p.items() if k!='release_duration_s'}
+        assert read(root/'plans/04.json')=={**instant,'mode':'instant','solid_fraction':.5}
+        assert read(root/'plans/09.json')=={**read(root/'plans/04.json'),'manning':.025}
+        assert all(read(plan).get('release_duration_s',0)<=300 for plan in (root/'plans').glob('*.json'))
         assert all(read(plan)['solid_fraction']<=p['solid_fraction'] for plan in (root/'plans').glob('*.json'))
 
 
