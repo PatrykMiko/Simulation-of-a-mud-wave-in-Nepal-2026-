@@ -15,7 +15,7 @@ def resources():
     cpus = len(os.sched_getaffinity(0))
     # Allow for the manager, the incumbent, compression and fluctuations in
     # solver working sets. Values are estimates for these particular rasters.
-    estimate = min(5, cpus, max(0, (available//GIB-3)//10), max(0, (disk//GIB-8)//18))
+    estimate = min(5, cpus, max(0, (available//GIB-3)//10), max(0, (disk//GIB-10)//32))
     return dict(cpu=cpus, ram_gib=round(available/GIB,1), disk_gib=round(disk/GIB,1),
                 recommended=int(estimate))
 

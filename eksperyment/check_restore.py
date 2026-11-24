@@ -7,6 +7,7 @@ import tempfile
 import time
 
 from ravaflow_tools import checkpoint as C, nepal as N, synthetic
+from . import autosave
 from .build import PREFIX, ROOT
 from .design import BASE
 from .run import config,simulate
@@ -17,8 +18,8 @@ def sample(root, name):
     cfg.update(data_dir=str(root/'data'),study_dir=str(root/'work'),volume_m3=200000,
                output_interval_s=5,release_start_s=0,control_points=[])
     p={**BASE,'mode':'gradual','release_duration_s':4}
-    result=simulate(cfg,p,root/name,root/'work/grids/copernicus_30m',cap=90,outlet=(340750,3111350))
-    C.atomic(root/name/'done.json', {k:result[k] for k in ('iou_all','metrics','volume','time_s','end_reason')})
+    result=simulate(cfg,p,root/'work'/name,root/'work/grids/copernicus_30m',cap=90,outlet=(340750,3111350))
+    C.atomic(root/'work'/name/'done.json', {k:result[k] for k in ('iou_all','metrics','volume','time_s','end_reason')})
 
 
 def wait(session, condition):
@@ -45,27 +46,36 @@ def verify():
              'eksperyment.check_restore',str(root),'group'],env)
     try:
         names = ('resumed1','resumed2')
-        wait(s,lambda:all((root/name/'frames/timeline.csv').exists() for name in names))
+        wait(s,lambda:all((root/'work'/name/'frames/timeline.csv').exists() for name in names))
         s.save_stop()
-        s.start([],env)
-        wait(s,lambda:all((root/name/'done.json').exists() for name in names))
-        deadline=time.monotonic()+60
-        while C.alive(s.state().get('coordinator')) and time.monotonic()<deadline:
-            time.sleep(.1)
-        if C.alive(s.state().get('coordinator')):
-            raise RuntimeError('Proces testowy nadal działa.')
+        autosave.publish(root)
+
         def hashes(name):
-            d=root/name
+            d=root/'work'/name
             return {str(p.relative_to(d)):C.digest(p) for p in [*d.glob('*.tif'),*(d/'frames').glob('*'),d/'done.json']}
         expected = hashes('continuous')
-        if any(hashes(name)!=expected for name in names):
-            raise ValueError(f'Niezgodne wyniki po wznowieniu. Zachowano {root}')
+        for use_backup in (False, True):
+            if use_backup:
+                # The workspace has advanced all the way to the end. Recovery
+                # must restore both memory and the earlier on-disk output tree.
+                autosave.restore(root,env)
+                if any((root/'work'/name/'done.json').exists() for name in names):
+                    raise RuntimeError('Pliki po punkcie zapisu pozostały w katalogu.')
+            s.start([],env)
+            wait(s,lambda:all((root/'work'/name/'done.json').exists() for name in names))
+            deadline=time.monotonic()+60
+            while C.alive(s.state().get('coordinator')) and time.monotonic()<deadline:
+                time.sleep(.1)
+            if C.alive(s.state().get('coordinator')):
+                raise RuntimeError('Proces testowy nadal działa.')
+            if any(hashes(name)!=expected for name in names):
+                raise ValueError(f'Niezgodne wyniki po wznowieniu. Zachowano {root}')
     except BaseException:
         if C.alive(s.state().get('coordinator')):
             s.command(s.state(),'--kill')
         raise
     shutil.rmtree(root)
-    print('Zgodne rastry, klatki, metryki i bilans dwóch równoległych prób po wznowieniu.')
+    print('Zgodne rastry, klatki, metryki i bilans dwóch równoległych prób po wznowieniu ręcznym i z automatycznej kopii.')
 
 
 if __name__=='__main__':

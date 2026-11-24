@@ -1,39 +1,69 @@
 # Jak uruchomić 20 symulacji Nepalu na siatce 30 m
 
-Po zakończeniu wyślij plik **`wyniki/paczka.zip`**. Zawiera ranking według IoU całego ocenianego obszaru, wyniki wszystkich 20 prób oraz mapy, animację i dane zwycięzcy.
+Po sklonowaniu gałęzi `main` otwórz terminal w folderze z tym plikiem. Dane Nepalu i źródła r.avaflow są w repo. Wszystkie próby działają na **CPU**. Gotowym plikiem do wysłania będzie **`wyniki/paczka.zip`**.
 
-## Pierwsze uruchomienie po sklonowaniu repozytorium
+## Wybierz sposób uruchomienia
 
-Instrukcja zakłada świeży klon gałęzi `main` na natywnym Ubuntu 24.04 LTS (x86-64). Potrzebujesz konta z `sudo`, internetu na czas instalacji i lokalnego dysku z systemem plików Linux. Solver używa CPU.
+| System komputera | Środowisko obliczeń | Terminal do poniższych poleceń |
+|---|---|---|
+| Windows z obsługą wirtualizacji | Ubuntu 24.04 w Canonical Multipass | **Git Bash** z Git for Windows, w katalogu klonu |
+| macOS z obsługą Multipass | Ubuntu 24.04 w Multipass | Terminal, w katalogu klonu |
+| Inny Linux z obsługą wirtualizacji | Ubuntu 24.04 w Multipass | Bash, w katalogu klonu |
+| Natywne Ubuntu 24.04 | bezpośrednio na komputerze | Bash, w katalogu klonu |
 
-1. Otwórz terminal **w katalogu sklonowanego repozytorium**, w którym widzisz ten plik i folder `scripts`. W tej samej lokalizacji będziesz uruchamiać wszystkie poniższe polecenia. Ze względu na wrapper GRASS wybierz ścieżkę bez spacji, złożoną z liter ASCII, cyfr, myślników, kropek, ukośników lub podkreśleń. Uruchom jednorazową instalację.
+Na Windowsie, macOS i innym Linuksie główny system zostaje na miejscu. Maszyna wirtualna ma własny dysk i zachowuje zainstalowane programy oraz dane między uruchomieniami. Zgodność architektury komputera, wersji jądra i zapisu pamięci sprawdzi test instalacyjny. W tym projekcie wykonano go na Linuksie x86-64. Przed startem na innym sprzęcie, również na Apple Silicon, poczekaj na zaliczenie testu na tym komputerze.
+
+### Windows, macOS lub inny Linux
+
+1. Zainstaluj **Canonical Multipass** dla swojego systemu. Na Windowsie instalator wymaga uprawnień administratora i obsługi wirtualizacji. Na macOS użyj instalatora `.pkg`. Na Linuksie z obsługą Snap można wykonać `sudo snap install multipass`. Następnie otwórz wskazany w tabeli terminal i sprawdź polecenie `multipass version`. [Instalacja i wymagania Multipass dla danego systemu](https://documentation.ubuntu.com/multipass/latest/how-to-guides/install-multipass/).
+2. Sprawdź **wolną pamięć oraz dysk na fizycznym komputerze**. Przykład dla jednej próby równocześnie to maszyna z 2 CPU, 16 GiB RAM i dyskiem 80 GiB. Użyj go, jeśli możesz udostępnić tyle RAM i miejsca, zostawiając zasoby dla systemu. Dysk wirtualny może rosnąć w trakcie pracy. Wybierz rozmiar, który zmieści się na dysku fizycznym także po wypełnieniu.
+3. W katalogu klonu uruchom jednorazową instalację. Przykład poniżej tworzy maszynę `nepal30`, przenosi z lokalnego commita pliki z linuksowymi uprawnieniami i instaluje zależności wewnątrz maszyny.
 
    ```bash
-   ./scripts/eksperyment-install.sh
+   bash scripts/eksperyment-vm.sh install 2 16G 80G
    ```
 
-2. Instalator używa APT do instalacji **GRASS GIS 8** i nagłówków `grass-dev`, narzędzi **GDAL**, kompilatora C/C++, narzędzi budowy, systemowego Pythona, Pillow i **FFmpeg**. Następnie tworzy lokalne środowisko `.venv` i instaluje w nim m.in. NumPy, SciPy, Rasterio, Matplotlib i Optunę. Odczytuje z repo źródła **r.avaflow 4.0G Rev.7**, sprawdza SHA-256 i kompiluje rdzeń z monitorem oraz oryginalny rdzeń porównawczy w `.local-tools/nepal20`. Buduje również **DMTCP 4.2.0** z wtyczką do zapisu otwartych plików. Dane 30 m są już w repo. PyCharm, CUDA i konto Optuny są zbędne.
-3. Instalator uruchamia krótki test obu trybów uwalniania i porównuje syntetyczny przebieg z oryginalnym rdzeniem. Następnie zapisuje dwie trwające jednocześnie małe próby, odtwarza je i porównuje wyniki z przebiegiem ciągłym. Poczekaj na komunikat o zgodności rastrów, klatek, metryk i bilansu. Sam test można powtórzyć poleceniem `./scripts/eksperyment.sh verify`.
+   Na stacji z większą pamięcią można przed utworzeniem maszyny wybrać np. `install 6 60G 200G` dla maksymalnie pięciu prób, jeśli gospodarz ma odpowiedni zapas. Parametry określają rozmiar tworzonej maszyny. Powtórzenie instalacji w istniejącej maszynie wykorzystuje jej dotychczasowe zasoby. Maszynę i checkpointy zachowaj do odebrania wyniku.
 
-## Sprawdź zasoby przed pierwszą próbą
+### Natywne Ubuntu 24.04
 
-```bash
-./scripts/eksperyment.sh zasoby
-```
-
-Polecenie wyświetla bieżącą **dostępną** pamięć RAM, wolne miejsce na partycji projektu i liczbę dostępnych procesorów logicznych. Przy pierwszym starcie program ponawia odczyt i automatycznie dobiera **od jednej do pięciu** równoległych prób. Orientacyjnie rezerwuje 3 GiB RAM i 8 GiB dysku dla wspólnych operacji, następnie liczy po 10 GiB dostępnej RAM, 18 GiB wolnego dysku i jednym logicznym CPU na próbę. Dla pięciu daje to około **53 GiB dostępnej RAM, 98 GiB wolnego dysku i 5 CPU**. Podstawą szacunku dysku jest poprzedni pojedynczy finał z chwilowym budżetem checkpointu około 15,5 GiB. Rzeczywiste wykorzystanie zależy od zasięgu fali, fazy eksportu i innych aplikacji. Przy oszacowaniu zero automatyczny start wstrzymuje uruchomienie.
-
-**Jeśli pięć naraz to za dużo**, możesz od początku ustawić np. dwie, nawet gdy automat proponuje więcej. Wybierz tylko jedno z poleceń startowych poniżej. Po uruchomieniu zajrzyj do `./scripts/eksperyment.sh status`, `free -h` i `df -h .`, szczególnie po załadowaniu pierwszych solverów. W razie potrzeby zapisz grupę przed wyłączeniem. Wznowienie z checkpointu odtwarza tę samą grupę procesów i jej dotychczasową równoległość.
-
-## Start jednym poleceniem
-
-W katalogu projektu wykonaj poniższe polecenie.
+Otwórz Bash w katalogu repo na lokalnym dysku linuksowym. Ze względu na wrapper GRASS użyj ścieżki bez spacji i polskich znaków. Potrzebujesz konta z `sudo` oraz internetu do instalacji.
 
 ```bash
-./scripts/eksperyment.sh start
+./scripts/eksperyment-install.sh
 ```
 
-Program działa w tle. Terminal można zamknąć. Aby od początku ograniczyć obciążenie do dwóch prób, jako polecenie startowe wybierz `NEPAL_WORKERS=2 ./scripts/eksperyment.sh start`. Ręczny limit ustal na poziomie sugerowanym przez `zasoby` lub niższym. Próby i momenty aktualizacji Optuny pozostają takie same. Pierwsze dziesięć konfiguracji zajmuje dwie serie, następnie Optuna proponuje pięć konfiguracji na podstawie dziesięciu wyników i pięć na podstawie piętnastu.
+### Co sprawdza instalator
+
+Obie ścieżki instalują GRASS GIS 8 z nagłówkami, GDAL, kompilator C/C++, Python z lokalnym środowiskiem, NumPy, SciPy, Rasterio, Matplotlib, Optunę i FFmpeg. Instalator kontroluje SHA-256 kodu r.avaflow 4.0G Rev.7, kompiluje solver i buduje DMTCP 4.2.0 do zapisu procesów. Instalowanie sterowników GPU lub CUDA jest zbędne.
+
+Na małym terenie instalator sprawdza dwa sposoby uwalniania oraz zgodność z oryginalnym rdzeniem. Dwie równoległe próby są zapisywane i odtwarzane z ręcznego zapisu, a potem z osobnej kopii po dalszej zmianie plików. Poczekaj na komunikat o zgodności rastrów, klatek, metryk i bilansu oraz odczyt zasobów. Test obejmuje odtworzenie procesów w tej samej instalacji.
+
+## Uruchomienie, postęp i wyniki
+
+Wybierz kolumnę właściwą dla sposobu instalacji. Polecenia wykonuj w katalogu klonu na swoim komputerze.
+
+| Czynność | Windows / macOS / Linux z Multipass | Natywne Ubuntu |
+|---|---|---|
+| Sprawdź zasoby przed pierwszym startem | `bash scripts/eksperyment-vm.sh zasoby` | `./scripts/eksperyment.sh zasoby` |
+| Rozpocznij serię w tle | `bash scripts/eksperyment-vm.sh start` | `./scripts/eksperyment.sh start` |
+| Opcjonalnie wybierz dwie próby przy pierwszym starcie | `bash scripts/eksperyment-vm.sh start 2` | `NEPAL_WORKERS=2 ./scripts/eksperyment.sh start` |
+| Sprawdź postęp i ostatnią potwierdzoną kopię | `bash scripts/eksperyment-vm.sh status` | `./scripts/eksperyment.sh status` |
+| **Zapisz i zatrzymaj przed wyłączeniem laptopa** | `bash scripts/eksperyment-vm.sh save-stop` | `./scripts/eksperyment.sh save-stop` |
+| **Wznów po planowanym wyłączeniu** | `bash scripts/eksperyment-vm.sh start` | `./scripts/eksperyment.sh start` |
+| Po awarii wróć do potwierdzonej automatycznej kopii | `bash scripts/eksperyment-vm.sh recover` | `./scripts/eksperyment.sh recover` |
+| Odbierz sprawdzony ZIP po zakończeniu | `bash scripts/eksperyment-vm.sh export` | gotowy w `wyniki/paczka.zip` |
+
+Automat dobiera równoległość do **dostępnej** RAM, wolnego dysku i CPU w środowisku obliczeń. Orientacyjny budżet to 3 GiB RAM i 10 GiB dysku wspólnie oraz 10 GiB RAM, 32 GiB dysku i jeden logiczny CPU na próbę. Dla pięciu prób daje to około **53 GiB dostępnej RAM i 170 GiB wolnego dysku**. Szacunek uwzględnia dodatkowe miejsce na automatyczną kopię. W czasie jej wymiany chwilowo istnieją dwa zapisy obok bieżących obliczeń. Rzeczywisty rozmiar zależy od liczby aktywnych prób, plików solvera i systemu plików. W maszynie wirtualnej polecenie `zasoby` widzi przestrzeń wewnątrz maszyny. Sprawdzaj również rzeczywiste miejsce po stronie gospodarza.
+
+Przy pierwszym starcie możesz wybrać mniej pracowników. Po załadowaniu solverów sprawdź zużycie zasobów. Wznowienie odtwarza grupę z dotychczasową równoległością. Pierwsze dziesięć prób ma ustalone parametry, a następne dziesięć dobiera Optuna w dwóch grupach po pięć.
+
+## Zapis w trakcie próby i wyłączenie laptopa
+
+- **Planowane wyłączenie.** W dowolnym momencie aktywnych obliczeń wywołaj `save-stop` z tabeli i **poczekaj na końcowe potwierdzenie**. DMTCP zapisuje stan menedżera, aktywnych solverów i otwartych plików. Polecenie dla Multipass zatrzymuje także maszynę wirtualną po udanym zapisie. Po ponownym włączeniu `start` odtwarza ten stan. Zachowaj tę samą maszynę, ścieżkę, jądro, kod, dane i biblioteki.
+- **Automatyczny zapis.** Co godzinę rzeczywistej pracy między wznowieniami oraz po ukończeniu 5., 10. i 15. próby nadzór zatrzymuje grupę, utrwala jej pamięć **razem z odpowiadającymi jej plikami roboczymi** i wznawia obliczenia, o ile jest miejsce. Kopia jest pod `wyniki/.autosave` wewnątrz środowiska obliczeń. Wcześniejsza potwierdzona kopia pozostaje dostępna do publikacji kolejnej. Po każdej ukończonej próbie osobno zapisywane są raport i ranking. Klatki co 120 s zdarzenia służą do animacji.
+- **Po nagłej utracie zasilania.** `start` potrafi wznowić potwierdzony zapis ręczny. Jeśli wyświetli komunikat o kopii automatycznej, użyj `recover`. To polecenie cofa pliki i procesy do ostatniego potwierdzonego punktu, a potem podejmuje obliczenia. Praca wykonana później może wymagać powtórzenia. Przed pierwszą potwierdzoną kopią pozostają ukończone raporty i możliwość powtórzenia niedokończonych prób poleceniem `retry`.
+- **Przy małej ilości miejsca.** Nadzór podejmuje próbę zapisu i zatrzymania. Stan `saved` z powodem `low-disk-after-backup` lub `backup-failed` oznacza zachowany bieżący checkpoint. Zwolnij miejsce i użyj `start`. Przy komunikacie **„Pauza w RAM”** pozostaw komputer włączony, zwolnij miejsce poza plikami serii i ponów `save-stop`.
 
 ## Ile czasu zdarzenia liczy jedna próba?
 
@@ -45,30 +75,14 @@ Każda próba sama dobiera moment zakończenia według tych samych reguł. Co 12
 
 Czas pracy komputera zależy od sprzętu, liczby równoległych prób i kroku numerycznego. Po pierwszej grupie masz pierwszy pomiar dla swojej maszyny. Końcowe IoU całego ocenianego obszaru wyznacza miejsce w rankingu. Raport podaje osobno czas symulowany, powód zakończenia i informację o dojściu.
 
-## Postęp, planowana przerwa i wznowienie
-
-W nowym terminalu otwartym w katalogu repozytorium sprawdzisz postęp poleceniem
-
-```bash
-./scripts/eksperyment.sh status
-```
-
-Status pokazuje liczbę zakończonych prób, czas zdarzenia ostatniej zapisanej klatki aktywnych prób, stan dysku i lidera. Ranking zaczyna się pojawiać po pierwszej zakończonej próbie. Szczegóły uruchomienia są w `wyniki/supervisor.log` i `wyniki/checkpoint/job.log`.
-
-Przed wyłączeniem komputera uruchom zapis.
-
-```bash
-./scripts/eksperyment.sh save-stop
-```
-
-**Poczekaj na komunikat „ZAPIS UKOŃCZONY”**. Zapis obejmuje menedżera i aktywne procesy, także w środku przebiegu. Po ponownym uruchomieniu komputera otwórz terminal w tym samym katalogu repozytorium i wznów serię.
-
-```bash
-./scripts/eksperyment.sh start
-```
-
-Zachowaj ten sam katalog, kernel, biblioteki, programy, dane i środowisko. Nadzór sprawdza wolne miejsce i szacuje koszt checkpointu na podstawie pamięci i otwartych plików. Przy presji dysku podejmuje próbę zapisu. Przy komunikacie „Pauza w RAM” **zostaw komputer włączony**, zwolnij miejsce poza katalogiem obliczeń i ponów `save-stop`. Nagła utrata zasilania podczas pracy może kosztować obliczenia od początku aktywnej próby. Po takim błędzie sprawdź logi. Przy wygaszonych procesach `./scripts/eksperyment.sh retry` zachowuje przyjęte raporty i powtarza niedokończone próby z zapisanymi parametrami.
-
 ## Co wysłać
 
 Po komunikacie „Zakończono” wyślij **`wyniki/paczka.zip`**. Program sam tworzy archiwum i sprawdza jego CRC. `ranking.csv` jest posortowany malejąco według końcowego IoU całości. `best.json` wskazuje katalog zwycięzcy. W nim są m.in. `zasieg.png`, `glebokosc.png`, `fala.mp4`, georeferencyjne rastry, bilans i klatki z głębokością i prędkościami faz. Z każdej przegranej próby pozostaje raport JSON. Szczegółowe założenia i definicje zawiera [OPIS.md](OPIS.md).
+
+## Jeśli instalacja lub start się nie uda
+
+Otwórz repozytorium w **Claude Code** i poproś Claude’a o zdiagnozowanie oraz naprawienie błędu. Podaj system, używaną ścieżkę (Multipass lub natywne Ubuntu), dokładne polecenie i ostatnie linie komunikatu błędu. W przypadku błędu w tle dołącz wynik `status` oraz końcówkę `wyniki/supervisor.log` i `wyniki/checkpoint/job.log`, jeśli powstały. W Multipass logi są wewnątrz maszyny. Możesz je przeczytać np. poleceniem `multipass exec nepal30 -- tail -n 50 /home/ubuntu/nepal30/wyniki/supervisor.log`.
+
+Przykładowa prośba do Claude’a:
+
+> Przeczytaj SYMULACJA.md i OPIS.md. Na moim komputerze polecenie […] zakończyło się komunikatem […]. Znajdź przyczynę, popraw instalację lub uruchomienie i sprawdź naprawę. Zachowaj parametry eksperymentu, metrykę IoU, wyniki i checkpointy. Jeśli istnieje zapis aktywnej serii, przed zmianą jej środowiska sprawdź, czy nadal będzie możliwe wznowienie. Przed pierwszą pełną serią potwierdź wynik syntetycznego testu zapisu i odtworzenia.

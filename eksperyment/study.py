@@ -72,6 +72,8 @@ def finish(root, cfg):
     with ZipFile(tmp) as archive:
         if bad := archive.testzip():
             raise IOError(f'Błąd CRC w ZIP: {bad}')
+    with tmp.open('rb') as stream:
+        os.fsync(stream.fileno())
     tmp.replace(root/'paczka.zip')
     C.atomic(root/'finished.json',dict(trials=20,winner=best['number'],iou_all=best['iou_all']))
 
