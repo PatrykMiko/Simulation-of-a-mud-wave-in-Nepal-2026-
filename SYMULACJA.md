@@ -2,27 +2,13 @@
 
 Po zakończeniu wyślij plik **`wyniki/paczka.zip`**. Zawiera ranking według IoU całego ocenianego obszaru, wyniki wszystkich 20 prób oraz mapy, animację i dane zwycięzcy.
 
-## Udostępnienie przez GitHub
+## Pierwsze uruchomienie po sklonowaniu repozytorium
 
-**Patryk** wykonuje jednorazowo poniższe polecenia w swojej kopii projektu. Kod eksperymentu, dokumentacja, źródła r.avaflow oraz dane są już w lokalnej historii `main`. Wystarczy wypchnąć tę gałąź.
+Instrukcja zakłada świeży klon gałęzi `main` na natywnym Ubuntu 24.04 LTS (x86-64). Potrzebujesz konta z `sudo`, internetu na czas instalacji i lokalnego dysku z systemem plików Linux. Solver używa CPU.
 
-```bash
-cd "$HOME/PycharmProjects/Simulation-of-a-mud-wave-in-Nepal-2026-"
-git push origin main
-```
-
-**Osoba wykonująca obliczenia** po otrzymaniu dostępu przechodzi do instalacji poniżej. Jeśli ma już klon w `$HOME/nepal30`, przed pierwszą instalacją wystarczy wykonać `cd "$HOME/nepal30"`, `git switch main` i `git pull --ff-only origin main`, a następnie uruchomić instalator. Aktualizacje repo wykonuj przed rozpoczęciem serii. Wznowienie zapisanego przebiegu wymaga tej samej wersji kodu.
-
-## Instalacja na nowym komputerze
-
-Instrukcja dotyczy natywnego Ubuntu 24.04 LTS, x86-64. Potrzebne są konto z `sudo`, internet do instalacji oraz lokalny dysk z systemem plików Linux. Solver używa CPU. Wszystkie polecenia po sklonowaniu wykonuj z katalogu repozytorium.
-
-1. Na czystym Ubuntu zainstaluj Git i sklonuj repo do krótkiej ścieżki na lokalnym dysku. Jeśli repo jest prywatne, najpierw przyjmij zaproszenie właściciela na GitHubie i skorzystaj ze swojego uwierzytelnienia Git. Ścieżka projektu powinna zawierać wyłącznie litery ASCII, cyfry, myślniki, kropki, ukośniki lub podkreślenia.
+1. Otwórz terminal **w katalogu sklonowanego repozytorium**, w którym widzisz ten plik i folder `scripts`. W tej samej lokalizacji będziesz uruchamiać wszystkie poniższe polecenia. Ze względu na wrapper GRASS wybierz ścieżkę bez spacji, złożoną z liter ASCII, cyfr, myślników, kropek, ukośników lub podkreśleń. Uruchom jednorazową instalację.
 
    ```bash
-   sudo apt-get update && sudo apt-get install -y git
-   git clone --branch main https://github.com/PatrykMiko/Simulation-of-a-mud-wave-in-Nepal-2026-.git "$HOME/nepal30"
-   cd "$HOME/nepal30"
    ./scripts/eksperyment-install.sh
    ```
 
@@ -32,7 +18,6 @@ Instrukcja dotyczy natywnego Ubuntu 24.04 LTS, x86-64. Potrzebne są konto z `su
 ## Sprawdź zasoby przed pierwszą próbą
 
 ```bash
-cd "$HOME/nepal30"
 ./scripts/eksperyment.sh zasoby
 ```
 
@@ -50,27 +35,35 @@ W katalogu projektu wykonaj poniższe polecenie.
 
 Program działa w tle. Terminal można zamknąć. Aby od początku ograniczyć obciążenie do dwóch prób, jako polecenie startowe wybierz `NEPAL_WORKERS=2 ./scripts/eksperyment.sh start`. Ręczny limit ustal na poziomie sugerowanym przez `zasoby` lub niższym. Próby i momenty aktualizacji Optuny pozostają takie same. Pierwsze dziesięć konfiguracji zajmuje dwie serie, następnie Optuna proponuje pięć konfiguracji na podstawie dziesięciu wyników i pięć na podstawie piętnastu.
 
+## Ile czasu zdarzenia liczy jedna próba?
+
+Każda próba sama dobiera moment zakończenia według tych samych reguł. Co 120 s symulowanego zdarzenia program zapisuje klatkę i sprawdza ruch fali.
+
+- **Po dotarciu do końca badanego odcinka** program czeka jeszcze co najmniej 600 s czasu zdarzenia. Kończy próbę, gdy przez pięć kolejnych interwałów skumulowane pole zalania przyrasta za każdym razem najwyżej o 0,5%. Dojście oznacza co najmniej trzy oceniane komórki z chwilową głębokością ≥0,1 m w promieniu 300 m od punktu końcowego.
+- **Gdy fala jeszcze nie dotarła**, od 7200 s program sprawdza, czy przez pełną symulowaną godzinę pole zalane kiedykolwiek poza źródłem zwiększyło się najwyżej o 0,5%, a zalanie zbliżyło się do punktu końcowego o mniej niż 30 m. Jeśli oba warunki się utrzymują, kończy próbę z powodem `stalled`. Najwcześniej wypada to około 10 800 s (3 h zdarzenia).
+- **Gdy solver zgłosi ustanie przepływu**, próba może skończyć się wcześniej. Jeśli fala wciąż się przemieszcza, górny limit wynosi 43 200 s, czyli 12 godzin **modelowanego zdarzenia**.
+
+Czas pracy komputera zależy od sprzętu, liczby równoległych prób i kroku numerycznego. Po pierwszej grupie masz pierwszy pomiar dla swojej maszyny. Końcowe IoU całego ocenianego obszaru wyznacza miejsce w rankingu. Raport podaje osobno czas symulowany, powód zakończenia i informację o dojściu.
+
 ## Postęp, planowana przerwa i wznowienie
 
-W nowym terminalu:
+W nowym terminalu otwartym w katalogu repozytorium sprawdzisz postęp poleceniem
 
 ```bash
-cd "$HOME/nepal30"
 ./scripts/eksperyment.sh status
 ```
 
 Status pokazuje liczbę zakończonych prób, czas zdarzenia ostatniej zapisanej klatki aktywnych prób, stan dysku i lidera. Ranking zaczyna się pojawiać po pierwszej zakończonej próbie. Szczegóły uruchomienia są w `wyniki/supervisor.log` i `wyniki/checkpoint/job.log`.
 
-Przed wyłączeniem komputera:
+Przed wyłączeniem komputera uruchom zapis.
 
 ```bash
 ./scripts/eksperyment.sh save-stop
 ```
 
-**Poczekaj na komunikat „ZAPIS UKOŃCZONY”**. Zapis obejmuje menedżera i aktywne procesy, także w środku przebiegu. Po ponownym uruchomieniu komputera:
+**Poczekaj na komunikat „ZAPIS UKOŃCZONY”**. Zapis obejmuje menedżera i aktywne procesy, także w środku przebiegu. Po ponownym uruchomieniu komputera otwórz terminal w tym samym katalogu repozytorium i wznów serię.
 
 ```bash
-cd "$HOME/nepal30"
 ./scripts/eksperyment.sh start
 ```
 
