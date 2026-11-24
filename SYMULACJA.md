@@ -2,6 +2,17 @@
 
 Po zakończeniu wyślij plik **`wyniki/paczka.zip`**. Zawiera ranking według IoU całego ocenianego obszaru, wyniki wszystkich 20 prób oraz mapy, animację i dane zwycięzcy.
 
+## Udostępnienie przez GitHub
+
+**Patryk** wykonuje jednorazowo poniższe polecenia w swojej kopii projektu. Kod eksperymentu, dokumentacja, źródła r.avaflow oraz dane są już w lokalnej historii `main`. Wystarczy wypchnąć tę gałąź.
+
+```bash
+cd "$HOME/PycharmProjects/Simulation-of-a-mud-wave-in-Nepal-2026-"
+git push origin main
+```
+
+**Osoba wykonująca obliczenia** po otrzymaniu dostępu przechodzi do instalacji poniżej. Jeśli ma już klon w `$HOME/nepal30`, przed pierwszą instalacją wystarczy wykonać `cd "$HOME/nepal30"`, `git switch main` i `git pull --ff-only origin main`, a następnie uruchomić instalator. Aktualizacje repo wykonuj przed rozpoczęciem serii. Wznowienie zapisanego przebiegu wymaga tej samej wersji kodu.
+
 ## Instalacja na nowym komputerze
 
 Instrukcja dotyczy natywnego Ubuntu 24.04 LTS, x86-64. Potrzebne są konto z `sudo`, internet do instalacji oraz lokalny dysk z systemem plików Linux. Solver używa CPU. Wszystkie polecenia po sklonowaniu wykonuj z katalogu repozytorium.
@@ -10,7 +21,7 @@ Instrukcja dotyczy natywnego Ubuntu 24.04 LTS, x86-64. Potrzebne są konto z `su
 
    ```bash
    sudo apt-get update && sudo apt-get install -y git
-   git clone https://github.com/PatrykMiko/Simulation-of-a-mud-wave-in-Nepal-2026-.git "$HOME/nepal30"
+   git clone --branch main https://github.com/PatrykMiko/Simulation-of-a-mud-wave-in-Nepal-2026-.git "$HOME/nepal30"
    cd "$HOME/nepal30"
    ./scripts/eksperyment-install.sh
    ```
